@@ -7,15 +7,15 @@
    light.css defines the same names. */
 
 /* Surfaces */
-@define-color ox_title #202020;                    /* C01 tab strip: Mica Alt, flat */
+@define-color ox_title #121212;                    /* C01 tab strip: Mica Alt, flat */
 @define-color ox_title_backdrop @ox_title;         /* C02 */
-@define-color ox_chrome #282828;                   /* C04 active tab, bars */
-@define-color ox_bg #202020;                       /* C05 content */
-@define-color ox_sidebar #252525;                  /* C06 */
-@define-color ox_flyout #2c2c2c;                   /* C07, D-A13 menus */
+@define-color ox_chrome #161616;                   /* C04 active tab, bars */
+@define-color ox_bg #1a1a1a;                       /* C05 content */
+@define-color ox_sidebar #141414;                  /* C06 */
+@define-color ox_flyout #1f1f1f;                   /* C07, D-A13 menus */
 @define-color ox_tooltip #2c2c2c;                  /* C08 */
-@define-color ox_card #202020;                     /* C09 visible: #2b2b2b */
-@define-color ox_field_bg #202020;                 /* C26 address, search */
+@define-color ox_card #1a1a1a;                     /* C09 visible: #2b2b2b */
+@define-color ox_field_bg #1a1a1a;                 /* C26 address, search */
 
 /* Text */
 @define-color ox_text #f1f1f1;                     /* C10 visible: #ffffff */
