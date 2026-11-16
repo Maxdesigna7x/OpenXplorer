@@ -367,8 +367,6 @@ fn edit_hsv(page: &SettingsPage, appearance: Appearance, role: &'static ColorRol
         #[weak]
         v,
         #[weak]
-        new_sample,
-        #[weak]
         new_hex,
         #[strong]
         updating,
