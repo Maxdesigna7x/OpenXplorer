@@ -29,7 +29,7 @@ serde_json.workspace = true
 rustix = { workspace = true, features = ["process"] }
 thiserror.workspace = true
 tempfile.workspace = true
-x11rb = { version = "0.13", features = ["composite", "shape"] }
+x11rb = { version = "0.14", features = ["composite", "shape"] }
 
 [lints]
 workspace = true
