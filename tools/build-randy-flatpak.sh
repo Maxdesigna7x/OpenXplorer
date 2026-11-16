@@ -25,7 +25,7 @@ flatpak build-finish --command=openxplorer-native --env=OX_NO_UPDATE_CHECK=1 \
     "${permissions[@]}" "$stage/build"
 
 # This repository is temporary and contains only this bundle.
-mkdir "$stage/repo"
+mkdir -p "$stage/repo"/{objects,tmp,state,extensions,refs/{heads,remotes,mirrors}}
 printf '[core]\nrepo_version=1\nmode=archive-z2\nmin-free-space-size=500MB\n' > "$stage/repo/config"
 flatpak build-export "$stage/repo" "$stage/build" stable
 mkdir -p "$(dirname "$bundle")"
