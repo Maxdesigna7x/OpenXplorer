@@ -216,10 +216,7 @@ impl BrowserWindow {
         position: TabPosition,
         search: Option<SearchStep>,
     ) -> Result<(), LocationError> {
-        let uri = self.resolve_address(address)?;
-        if self.open_flatpak_host_root(&uri) {
-            return Ok(());
-        }
+        let uri = self.flatpak_root_destination(self.resolve_address(address)?);
         // A file dialog keeps one tab and no Settings (INT-032): a new tab
         // goes to the location in the one there is.
         if self.is_picking() && self.tab_count() >= 1 {
@@ -261,10 +258,7 @@ impl BrowserWindow {
     /// The address is not a location the app can open; the current
     /// folder stays.
     pub(super) fn navigate(&self, address: &str) -> Result<(), LocationError> {
-        let uri = self.resolve_address(address)?;
-        if self.open_flatpak_host_root(&uri) {
-            return Ok(());
-        }
+        let uri = self.flatpak_root_destination(self.resolve_address(address)?);
         if self.refuse_while_active_tab_moves() {
             return Ok(());
         }
@@ -282,36 +276,17 @@ impl BrowserWindow {
         Ok(())
     }
 
-    /// Opens the real system root from a Flatpak, which has its own
-    /// private root. Nautilus is Zorin's host file manager. Calling it
-    /// directly avoids re-entering OpenXplorer through its MIME default.
-    fn open_flatpak_host_root(&self, uri: &str) -> bool {
-        if cfg!(test)
-            || uri != "file:///"
-            || self.is_picking()
-            || !self.context().desktop_integration().sandbox().is_flatpak()
+    /// In a Flatpak, Local Disk leads to the user's real home directory
+    /// instead of navigating the sandbox's private root.
+    fn flatpak_root_destination(&self, uri: String) -> String {
+        if uri == "file:///"
+            && !self.is_picking()
+            && self.context().desktop_integration().sandbox().is_flatpak()
         {
-            return false;
+            location::file_uri(&glib::home_dir())
+        } else {
+            uri
         }
-        let window = self.downgrade();
-        glib::spawn_future_local(async move {
-            let launched = gio::spawn_blocking(|| {
-                std::process::Command::new("flatpak-spawn")
-                    .args(["--host", "nautilus", "/"])
-                    .status()
-                    .is_ok_and(|status| status.success())
-            })
-            .await
-            .unwrap_or(false);
-            if !launched {
-                if let Some(window) = window.upgrade() {
-                    window.show_message(&ox_core::i18n::gettext(
-                        "Could not open the host root in GNOME Files.",
-                    ));
-                }
-            }
-        });
-        true
     }
 
     /// Goes to the folder holding `item` and selects it there once

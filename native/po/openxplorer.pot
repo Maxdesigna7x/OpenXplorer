@@ -6548,10 +6548,6 @@ msgstr ""
 msgid "Finish the current operation before disconnecting."
 msgstr ""
 
-#: crates/ox-app/src/window/navigation.rs
-msgid "Could not open the host root in GNOME Files."
-msgstr ""
-
 #. Keep each {name} as it is: the app puts a value there.
 #: crates/ox-app/src/window/navigation_buttons.rs
 msgid "Back to {place}"
