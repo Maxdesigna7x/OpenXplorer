@@ -141,6 +141,36 @@ fn this_pc_shows_its_groups_with_no_heading_or_quick_access_and_nothing_to_creat
     );
 }
 
+#[gtk::test]
+fn google_drive_is_listed_below_the_local_drives() {
+    let fixture = Fixture::standard();
+    let test = this_pc_with_drives(&fixture);
+    test.window.imp().volumes.borrow_mut().push(mounted_volume(
+        "Google Drive",
+        "google-drive://demo@example.com/",
+        VolumeKind::Cloud,
+    ));
+    test.window.render_places();
+    let landing = test.window.folder_pane().landing();
+    assert_eq!(
+        landing::section_titles(landing),
+        ["Devices and drives", "Network locations"]
+    );
+    let groups = landing::tile_groups(landing);
+    assert_eq!(groups[0].1.len(), 3);
+    assert_eq!(groups[1].1.len(), 1);
+    assert_eq!(texts_in(&groups[1].1[0])[0], "Google Drive");
+    let rows = crate::window::sidebar::sidebar_entries(
+        &test.window.places(),
+        &[],
+        &test.window.imp().locations.borrow(),
+        false,
+    );
+    let network = rows.iter().position(|row| row.label == "Network").unwrap();
+    assert_eq!(rows[network + 1].label, "Google Drive");
+    assert_eq!(rows[network + 1].section, rows[network].section);
+}
+
 /// Drive tiles are the Tiles view's: at least 256 pixels a column with
 /// their margins, all as wide, beside each other while they fit.
 #[gtk::test]

@@ -30,6 +30,7 @@ mod building;
 mod category_row;
 mod choice_list;
 mod confirmations;
+mod custom_appearance;
 mod default_apps;
 mod files_folders;
 mod general;

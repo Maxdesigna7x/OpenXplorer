@@ -119,6 +119,16 @@ async fn launch(prepared: &PreparedOpen, window: &gtk::Window) -> Result<(), Str
         OpenTarget::LocalPath(path) => gio::File::for_path(path),
         OpenTarget::Uri(uri) => gio::File::for_uri(uri),
     };
+    if matches!(prepared.launcher, Launcher::DesktopPortal) && file.has_uri_scheme("file") {
+        let mime = prepared.entry.content_type.clone();
+        let uri = file.uri().to_string();
+        let opened = gio::spawn_blocking(move || open_host_default(mime.as_deref(), &uri))
+            .await
+            .unwrap_or(false);
+        if opened {
+            return Ok(());
+        }
+    }
     match &prepared.launcher {
         Launcher::Application { id, .. } => {
             let application = crate::integration::installed_application(id)
@@ -133,6 +143,26 @@ async fn launch(prepared: &PreparedOpen, window: &gtk::Window) -> Result<(), Str
             .await
             .map_err(|error| error.to_string()),
     }
+}
+
+/// The portal may ask on each open, depending on its permissions. With
+/// an explicit host association use the desktop opener directly.
+fn open_host_default(mime: Option<&str>, uri: &str) -> bool {
+    let Some(mime) = mime else { return false };
+    let Ok(default) = std::process::Command::new("flatpak-spawn")
+        .args(["--host", "timeout", "5s", "xdg-mime", "query", "default", mime])
+        .output()
+    else {
+        return false;
+    };
+    let default_id = std::str::from_utf8(&default.stdout).unwrap_or_default().trim();
+    default.status.success()
+        && default_id.ends_with(".desktop")
+        && !default_id.starts_with("io.winspace.")
+        && std::process::Command::new("flatpak-spawn")
+            .args(["--host", "--env=GTK_USE_PORTAL=0", "gio", "open", uri])
+            .status()
+            .is_ok_and(|status| status.success())
 }
 
 /// Why the chosen application could not be found again to launch it.

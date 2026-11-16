@@ -13,7 +13,8 @@
 //! browser only when pressed (CMD-033, SAFE-002).
 
 use gtk::glib;
-use ox_core::update::REPOSITORY;
+const REPOSITORY: &str = "https://github.com/Maxdesigna7x/OpenXplorer";
+const SOURCE_VERSION: &str = "2.0.18-randy.1";
 
 use super::help::REPORT_ISSUE;
 use super::BrowserWindow;
@@ -58,7 +59,7 @@ const LICENSE_TITLE: &str = crate::i18n::message_id("OpenXplorer · License & so
 /// build's corresponding source is: its release tag in the repository,
 /// and the source archive published with each release.
 fn license_text() -> String {
-    let version = env!("CARGO_PKG_VERSION");
+    let version = SOURCE_VERSION;
     ox_core::i18n::format_message("Copyright (c) 2026 OpenXplorer contributors.\nAGPL-3.0-only. No warranty. You may redistribute and modify under the included terms.\n\nComplete corresponding source and build tools: {REPOSITORY}, tag v{version}, and the source archive published with each release at {REPOSITORY}/releases.", &[("REPOSITORY", REPOSITORY), ("version", version)])
 }
 

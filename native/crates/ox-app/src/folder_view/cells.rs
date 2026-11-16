@@ -751,7 +751,8 @@ impl FileCell {
         self.hide_name_editor();
         let imp = self.imp();
         let icon_size = imp.icon_size.get();
-        imp.image.set_art(item.art(), icon_size);
+        imp.image
+            .set_file_art(item.art(), icon_size, item.entry().icon().as_ref());
         imp.image.set_emblems(item.emblems(), icon_size);
         imp.label.set_text(&item.entry().name);
         if imp.shows_item_lines.get() {

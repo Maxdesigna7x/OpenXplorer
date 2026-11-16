@@ -28,12 +28,13 @@ serde_json.workspace = true
 # The Details tab's reader limits its own processor time.
 rustix = { workspace = true, features = ["process"] }
 thiserror.workspace = true
+tempfile.workspace = true
+x11rb = { version = "0.13", features = ["composite", "shape"] }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 # Writes the .tar.zst fixtures of the archive tests.
 ruzstd.workspace = true
 

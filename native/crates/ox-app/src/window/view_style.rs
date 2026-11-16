@@ -315,9 +315,14 @@ impl BrowserWindow {
     /// (VIEW-023) and Folder Options' own choices (VIEW-021).
     pub(super) fn follow_item_preferences(&self) {
         let preferences = self.context().settings_data().preferences;
+        self.skin().set_custom_appearance(&preferences.appearance_options);
         self.show_item_check_boxes(preferences.selection_marker);
         self.wait_for_ctrl_with_item_checks(preferences.item_checks_on_ctrl);
         for pane in self.folder_panes() {
+            pane.icon_view().set_tile_spacing(
+                preferences.appearance_options.icon_gap,
+                preferences.appearance_options.icon_padding,
+            );
             pane.details().set_date_style(date_style(&preferences));
             self.update_expandability_for(pane);
         }

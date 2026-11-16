@@ -671,6 +671,7 @@ fn load_pictures(conflict: &NameConflict, pictures: &[gtk::Image; 2], size: i32)
                 // The dialog shows the two files it asks about, wherever
                 // they are, as before.
                 local_only: false,
+                existing_only: false,
                 target_uri: None,
             };
             if let Some(texture) = preview(request).await {

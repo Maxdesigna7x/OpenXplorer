@@ -51,6 +51,8 @@ pub(crate) struct Places {
     pub quick_access: Vec<Place>,
     /// Drives and devices, without mounted SMB shares.
     pub drives: Vec<VolumeRow>,
+    /// Online accounts shown under Network, with their mount actions.
+    pub cloud_volumes: Vec<VolumeRow>,
     /// Saved shares with their connection state (This PC's Network
     /// locations section).
     pub saved_shares: Vec<SavedShare>,
@@ -70,7 +72,7 @@ pub(crate) fn compose(sources: PlaceSources<'_>) -> Places {
     let drives = sources
         .volumes
         .iter()
-        .filter(|row| !row.is_network())
+        .filter(|row| !row.is_network() && row.kind != crate::volumes::VolumeKind::Cloud)
         .cloned()
         .collect();
     let saved_shares: Vec<SavedShare> = sources
@@ -85,9 +87,16 @@ pub(crate) fn compose(sources: PlaceSources<'_>) -> Places {
         sources.stable_mounts,
         sources.visited_network,
     );
+    let cloud_volumes = sources
+        .volumes
+        .iter()
+        .filter(|row| row.kind == crate::volumes::VolumeKind::Cloud)
+        .cloned()
+        .collect();
     Places {
         quick_access,
         drives,
+        cloud_volumes,
         saved_shares,
         network,
     }

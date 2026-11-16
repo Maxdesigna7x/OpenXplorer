@@ -271,8 +271,8 @@ impl AppState {
         self.open_in_active_window(app, uris);
     }
 
-    /// Ctrl+N: another window at the active folder when it is a real
-    /// folder, else at home (app.js `newWindow`). New windows are refused
+    /// Ctrl+N: another window at the active folder, or on This PC when
+    /// that is the configured startup page. New windows are refused
     /// while an update installs and until its restart (TAB-043).
     pub(super) fn new_window(&self, app: &gtk::Application) {
         // Ctrl+N in a file dialog opens nothing. Only the
@@ -292,7 +292,12 @@ impl AppState {
             return;
         }
         let current = active_window(app).and_then(|window| window.current_uri());
-        let start = current.filter(|uri| can_start_a_new_window_in(uri));
+        let startup = self.context.settings_data().preferences.startup_folder;
+        let start = if startup.as_deref() == Some(VirtualPlace::ThisPc.uri()) {
+            startup
+        } else {
+            current.filter(|uri| can_start_a_new_window_in(uri))
+        };
         self.open_window(app, start.as_deref());
     }
 }
@@ -694,6 +699,43 @@ mod tests {
             .find(|window| **window != first)
             .expect("a second window");
         assert_eq!(second.current_uri(), Some(fixture.uri()));
+    }
+
+    #[gtk::test]
+    fn this_pc_startup_is_used_even_when_another_folder_is_open() {
+        let fixture = Fixture::standard();
+        let app = TestApp::new();
+        let this_pc = VirtualPlace::ThisPc.uri();
+        app.state.context.update_preferences(
+            PreferencesUpdate {
+                startup_folder: Some(this_pc.to_owned()),
+                ..PreferencesUpdate::default()
+            },
+            |result| result.expect("saved"),
+        );
+        wait_until("the startup preference to be saved", || {
+            app.state
+                .context
+                .settings_data()
+                .preferences
+                .startup_folder
+                .as_deref()
+                == Some(this_pc)
+        });
+        app.state.activate(&application());
+        let first = browser_windows()[0].clone();
+        assert_eq!(first.current_uri().as_deref(), Some(this_pc));
+        app.state.open(&application(), &[gio_file(fixture.root())]);
+        wait_until("the folder to open", || {
+            first.current_uri() == Some(fixture.uri())
+        });
+        app.state.new_window(&application());
+        let windows = browser_windows();
+        let second = windows
+            .iter()
+            .find(|window| **window != first)
+            .expect("a new window");
+        assert_eq!(second.current_uri().as_deref(), Some(this_pc));
     }
 
     /// parity: TAB-043

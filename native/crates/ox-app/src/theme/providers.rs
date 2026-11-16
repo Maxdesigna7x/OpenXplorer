@@ -7,6 +7,7 @@
 //! application's GTK settings change, never GNOME's.
 
 use gtk::gdk;
+use ox_core::settings::AppearanceOptions;
 
 use super::accent::{self, Accent};
 use super::contrast::Contrast;
@@ -33,6 +34,7 @@ enum Layer {
     Accent,
     /// The high-contrast rules.
     HighContrast,
+    Custom,
 }
 
 impl Layer {
@@ -43,7 +45,8 @@ impl Layer {
             Layer::TextSize => 1,
             Layer::Palette => 2,
             Layer::Accent => 3,
-            Layer::HighContrast => 4,
+            Layer::Custom => 4,
+            Layer::HighContrast => 5,
         };
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + steps_above_application
     }
@@ -65,6 +68,7 @@ pub(super) struct Providers {
     accent: gtk::CssProvider,
     /// The high-contrast rules, empty at normal contrast.
     high_contrast: gtk::CssProvider,
+    custom: gtk::CssProvider,
 }
 
 impl Providers {
@@ -79,6 +83,7 @@ impl Providers {
         add_to_display(display, &providers.text_size, Layer::TextSize);
         add_to_display(display, &providers.palette, Layer::Palette);
         add_to_display(display, &providers.accent, Layer::Accent);
+        add_to_display(display, &providers.custom, Layer::Custom);
         add_to_display(display, &providers.high_contrast, Layer::HighContrast);
         providers
     }
@@ -101,6 +106,7 @@ impl Providers {
             text_size: provider_with(&css_for_text_size(TextSize::DEFAULT)),
             accent: provider_with(""),
             high_contrast: provider_with(""),
+            custom: provider_with(""),
         }
     }
 
@@ -129,6 +135,11 @@ impl Providers {
             css.push_str(&font_family_rule(family));
         }
         self.text_size.load_from_string(&css);
+    }
+
+    pub(super) fn draw_custom(&self, options: &AppearanceOptions, appearance: Appearance) {
+        self.custom
+            .load_from_string(&super::custom::stylesheet(options, appearance));
     }
 
     /// Loads the high-contrast rules for [`Contrast::High`] and empties

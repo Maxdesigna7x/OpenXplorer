@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Custom icons (PROP-016): an item whose `GVfs` metadata names a picture
-//! (`metadata::custom-icon`, which Files reads and writes too) shows that
-//! picture in place of its art in the details and icon views. The lookup
-//! runs when a cell is bound, at low priority, like a thumbnail lookup,
+//! or theme icon shows it in place of its art in the details and icon views.
+//! The lookup runs when a cell is bound, at low priority, like a thumbnail lookup,
 //! and a picture that arrives after the cell shows another item is
 //! dropped. Pictures are decoded once at icon size and kept, so scrolling
 //! back to an item does not decode its picture again. An item without a
@@ -26,6 +25,8 @@ use crate::thumbnails::{self, PreviewPolicy};
 
 /// The metadata key Files stores a custom icon under.
 pub(crate) const CUSTOM_ICON: &str = "metadata::custom-icon";
+/// Files also stores a theme icon name instead of an image URI.
+const CUSTOM_ICON_NAME: &str = "metadata::custom-icon-name";
 /// Pictures larger than this are not decoded for an icon.
 const MAX_ICON_BYTES: u64 = 16 * 1024 * 1024;
 /// The size a picture is decoded at: the largest icon the views draw.
@@ -77,7 +78,9 @@ impl FileCell {
         imp.image.set_opacity(1.0);
         let entry = item.entry();
         let uri = entry.uri.clone();
-        let pixels = imp.icon_size.get() * self.scale_factor().max(1);
+        let size = imp.icon_size.get();
+        let scale = self.scale_factor().max(1);
+        let pixels = size * scale;
         let preview = previews.request(entry, pixels);
         if !uri.starts_with("file:") && preview.is_none() {
             return;
@@ -87,14 +90,33 @@ impl FileCell {
         let cell = self.downgrade();
         let lookup = glib::spawn_future_local(async move {
             let own = own_pictures(&uri).await;
-            let mut texture = match own.icon {
-                Some(icon) => icon_texture(icon).await,
+            let mut paintable = match own.icon {
+                Some(icon) => icon_texture(icon)
+                    .await
+                    .map(|texture| texture.upcast::<gdk::Paintable>()),
                 None => None,
             };
+            if let (None, Some(cell), Some(name)) = (&paintable, cell.upgrade(), own.icon_name) {
+                let theme = gtk::IconTheme::for_display(&cell.display());
+                if theme.has_icon(&name) {
+                    paintable = Some(
+                        theme
+                            .lookup_icon(
+                                &name,
+                                &[],
+                                size,
+                                scale,
+                                cell.direction(),
+                                gtk::IconLookupFlags::empty(),
+                            )
+                            .upcast(),
+                    );
+                }
+            }
             // A folder's picture sits on the folder at Medium icons and
             // larger, and takes the small icon's place in Details, List
             // and Small icons, as Windows draws it there.
-            if let Some(picture) = own.folder_picture.filter(|_| texture.is_none() && is_folder) {
+            if let Some(picture) = own.folder_picture.filter(|_| paintable.is_none() && is_folder) {
                 if on_the_folder {
                     if let (Some(cell), Some(picture)) = (cell.upgrade(), icon_texture(picture).await) {
                         cell.imp().folder_picture.show_texture(Some(&picture));
@@ -102,16 +124,16 @@ impl FileCell {
                     }
                     return;
                 }
-                texture = icon_texture(picture).await;
+                paintable = icon_texture(picture).await.map(|texture| texture.upcast());
             }
-            if texture.is_none() {
+            if paintable.is_none() {
                 if let Some(request) = preview {
-                    texture = thumbnails::preview(request).await;
+                    paintable = thumbnails::preview(request).await.map(|texture| texture.upcast());
                 }
             }
-            if let (Some(cell), Some(texture)) = (cell.upgrade(), texture) {
+            if let (Some(cell), Some(paintable)) = (cell.upgrade(), paintable) {
                 let imp = cell.imp();
-                imp.custom_icon.set_paintable(Some(&texture));
+                imp.custom_icon.set_paintable(Some(&paintable));
                 imp.custom_icon.set_visible(true);
                 imp.image.set_opacity(0.0);
                 imp.picture_lookup.take();
@@ -142,11 +164,11 @@ impl FileCell {
     }
 }
 
-/// The pictures a local item names for itself: its custom icon and, for
-/// a folder, the picture on its icon.
+/// The custom icon and folder picture assigned to a local item.
 #[derive(Debug, Default)]
 struct OwnPictures {
     icon: Option<String>,
+    icon_name: Option<String>,
     folder_picture: Option<String>,
 }
 
@@ -159,7 +181,7 @@ async fn own_pictures(uri: &str) -> OwnPictures {
     let file = gio::File::for_uri(uri);
     let Ok(info) = file
         .query_info_future(
-            &format!("{CUSTOM_ICON},{FOLDER_PICTURE}"),
+            &format!("{CUSTOM_ICON},{CUSTOM_ICON_NAME},{FOLDER_PICTURE}"),
             gio::FileQueryInfoFlags::NONE,
             glib::Priority::LOW,
         )
@@ -174,6 +196,7 @@ async fn own_pictures(uri: &str) -> OwnPictures {
     };
     OwnPictures {
         icon: named(CUSTOM_ICON),
+        icon_name: named(CUSTOM_ICON_NAME),
         folder_picture: named(FOLDER_PICTURE),
     }
 }

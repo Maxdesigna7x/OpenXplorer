@@ -32,13 +32,17 @@ pub(crate) enum VolumeKind {
     Drive,
     /// A phone, camera or iOS device.
     Device,
+    /// Google Drive mounted by GNOME Online Accounts.
+    Cloud,
 }
 
 impl VolumeKind {
     /// The kind of a location at the canonical `root`: a device for the
     /// `mtp:`, `gphoto2:` and `afc:` schemes, a drive otherwise.
     fn of_root(root: &str) -> Self {
-        if location::is_device_location(root) {
+        if root.starts_with("google-drive:") {
+            VolumeKind::Cloud
+        } else if location::is_device_location(root) {
             VolumeKind::Device
         } else {
             VolumeKind::Drive

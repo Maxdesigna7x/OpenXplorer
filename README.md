@@ -1,5 +1,34 @@
 # OpenXplorer
 
+**OpenXplorer RANDY** es una edición de [OpenXplorer de AKolenda](https://github.com/AKolenda/openxplorer), basada en [v2.0.18](https://github.com/AKolenda/openxplorer/releases/tag/v2.0.18) y adaptada para Zorin OS. Los enlaces de descargas del proyecto original se identifican a continuación.
+
+## Instalar en Zorin OS
+
+Descarga el [Flatpak de OpenXplorer RANDY](https://github.com/Maxdesigna7x/OpenXplorer/releases/download/v2.0.18-randy.1/OpenXplorer-RANDY-2.0.18.flatpak) para Linux x86-64. Ábrelo en la tienda de software o ejecuta lo siguiente desde la carpeta de descarga.
+
+```sh
+flatpak install --user ./OpenXplorer-RANDY-2.0.18.flatpak
+```
+
+Abre **OpenXplorer RANDY** desde el menú de aplicaciones. El paquete usa el runtime GNOME 51 de Flathub. En la [publicación de GitHub](https://github.com/Maxdesigna7x/OpenXplorer/releases/tag/v2.0.18-randy.1) también están el código fuente correspondiente y la suma SHA-256.
+
+Para generar el paquete desde el código, usa `tools/build-randy-flatpak.sh` en un entorno de compilación con Rust, las bibliotecas de [native](native/README.md) y el SDK GNOME 51.
+
+## Cambios de OpenXplorer RANDY
+
+Modificaciones de esta edición registradas el 16 de noviembre de 2026.
+
+- Iconos de carpetas y tipos de archivo del tema de escritorio, con prioridad para los iconos personalizados que guarda GNOME Archivos.
+- Espaciado y relleno de la cuadrícula, radio de las esquinas, selección azul opcional y paletas independientes para los modos claro y oscuro. Cada color se edita en HSV.
+- Inicio en **This PC** y activación de ventanas al pasar por la barra de Zorin durante un arrastre en X11.
+- Uso de las asociaciones del escritorio y del selector del sistema en Flatpak, miniaturas compartidas con GNOME Archivos y acceso al Google Drive de las Cuentas en línea de GNOME desde **Network** y la sección **Network locations** de **This PC**.
+- **Local Disk** muestra la capacidad real del disco raíz. En el Flatpak abre la raíz de Zorin en GNOME Archivos, que tiene acceso a esa vista del sistema.
+- Flatpak separado con identificador `io.winspace.Development.Native`.
+
+La edición conserva [AGPL-3.0-only](LICENSE) para las modificaciones y los avisos de [atribución](NOTICE), [licencias de terceros](THIRD_PARTY_NOTICES.md) y [Winspace](licenses/) del proyecto original. El código de la aplicación y las instrucciones de compilación están en [native](native/README.md).
+
+## Proyecto original
+
 A Windows File Explorer-inspired file manager for Linux, **developed for Zorin OS first and foremost**. Browse local folders, SMB shares and SFTP, FTP, WebDAV and NFS locations with tabs, split panes, a folder tree, Details, Compact, List and icon views with thumbnails, clickable paths, pinned folders, search, undoable file operations and light/dark themes.
 
 <a href="https://github.com/AKolenda/openxplorer/releases/latest"><img src="https://img.shields.io/github/v/release/AKolenda/openxplorer?style=for-the-badge&label=Download&labelColor=0067c0&color=004e8c&logo=linux&logoColor=white" alt="Download OpenXplorer" height="40"></a>

@@ -16,9 +16,9 @@
 //!
 //! [`compose`]: super::composition::compose
 
-use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
+use gtk::{gio, glib};
 
 use super::art::Art;
 use super::composition::{compose, Badge, Corner, NetworkBar, Picture};
@@ -153,6 +153,7 @@ mod imp {
         pub(super) emblems: OnceCell<EmblemPieces>,
         /// What is shown now, if anything.
         pub(super) shown: Cell<Option<ShownArt>>,
+        pub(super) themed: Cell<bool>,
     }
 
     impl Default for ArtImage {
@@ -170,6 +171,7 @@ mod imp {
                 badge: OnceCell::new(),
                 emblems: OnceCell::new(),
                 shown: Cell::new(None),
+                themed: Cell::new(false),
             }
         }
     }
@@ -272,7 +274,7 @@ impl ArtImage {
     pub(crate) fn set_art(&self, art: Art, size: i32) {
         let imp = self.imp();
         let wanted = ShownArt { art, size };
-        if imp.shown.get() == Some(wanted) {
+        if !imp.themed.replace(false) && imp.shown.get() == Some(wanted) {
             return;
         }
         imp.shown.set(Some(wanted));
@@ -280,6 +282,20 @@ impl ArtImage {
         self.show_picture(&composition.picture);
         self.show_network_bar(composition.network_bar, size);
         self.show_badge(composition.badge);
+    }
+
+    /// Uses the item's GIO icon when the desktop theme provides it.
+    /// The built-in art still supplies badges and the fallback picture.
+    pub(crate) fn set_file_art(&self, art: Art, size: i32, icon: Option<&gio::Icon>) {
+        self.set_art(art, size);
+        let theme = gtk::IconTheme::for_display(&self.display());
+        if let Some(icon) = icon.filter(|icon| theme.has_gicon(*icon)) {
+            let imp = self.imp();
+            imp.picture.set_from_gicon(icon);
+            imp.picture.set_pixel_size(size);
+            imp.picture.set_css_classes(&[]);
+            imp.themed.set(true);
+        }
     }
 
     /// Shows `emblems` over the art, `size` logical pixels square, or
@@ -364,6 +380,17 @@ mod tests {
     use super::*;
     use crate::icons::art::Connection;
     use crate::icons::{FileType, Icon, Tint};
+
+    #[gtk::test]
+    fn file_art_uses_the_desktop_icon_and_restores_fallback_on_rebind() {
+        let image = ArtImage::new(Art::Folder, 48);
+        let icon = gio::ThemedIcon::new("folder").upcast::<gio::Icon>();
+        image.set_file_art(Art::Folder, 48, Some(&icon));
+        assert_eq!(image.imp().picture.gicon(), Some(icon));
+        image.set_file_art(Art::Folder, 48, None);
+        assert!(image.imp().picture.gicon().is_none());
+        assert!(image.imp().picture.icon_name().is_some());
+    }
 
     /// What an [`ArtImage`] shows now: its picture, and whether the network
     /// bar and a badge show.

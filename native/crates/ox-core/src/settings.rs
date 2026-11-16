@@ -29,6 +29,7 @@
 //! The `winspace` directory name is a compatibility contract; do not rename
 //! it.
 
+mod appearance;
 mod choices;
 mod error;
 mod labels;
@@ -49,6 +50,7 @@ mod view_properties;
 use std::path::{Path, PathBuf};
 
 pub use crate::private_storage::{StorageError, StorageRefusal};
+pub use appearance::{AppearanceChange, AppearanceOptions};
 pub use choices::{Appearance, ContextMenu, StripPosition, Theme, View, ZipOpening};
 pub use error::SettingsError;
 pub use model::{Bookmark, RecentEntry, SettingsData};

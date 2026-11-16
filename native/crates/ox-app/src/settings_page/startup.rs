@@ -157,6 +157,20 @@ fn startup_folder_row(page: &SettingsPage) -> SettingRow {
         move |_| page.choose_startup_folder("")
     ));
     row.add_control(&home, ControlName::OwnLabel);
+    let this_pc = parts::button(&ox_core::i18n::gettext("Use This PC"), ButtonStyle::Bordered);
+    this_pc.set_tooltip_text(Some(&ox_core::i18n::gettext(
+        "Start on This PC instead of restoring the previous tabs.",
+    )));
+    this_pc.connect_clicked(glib::clone!(
+        #[weak]
+        page,
+        move |_| page.save_preferences(PreferencesUpdate {
+            startup_folder: Some(Page::ThisPc.uri().to_owned()),
+            restore_session: Some(false),
+            ..PreferencesUpdate::default()
+        })
+    ));
+    row.add_control(&this_pc, ControlName::OwnLabel);
     row.set_roomy_layout(RowLayout::ControlsBelow);
     row
 }

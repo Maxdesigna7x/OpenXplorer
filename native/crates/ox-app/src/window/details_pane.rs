@@ -409,10 +409,12 @@ impl DetailsPane {
     /// Shows `content`.
     pub(super) fn set_content(&self, content: &PaneContent) {
         let imp = self.imp();
+        let icon = content.desktop_icon.as_ref().and_then(gio::Icon::deserialize);
         if let Preview::Art(art) = content.preview {
-            imp.preview.set_art(art, PREVIEW_SIZE);
+            imp.preview.set_file_art(art, PREVIEW_SIZE, icon.as_ref());
         }
-        imp.small_art.set_art(content.preview.art(), SMALL_ART);
+        imp.small_art
+            .set_file_art(content.preview.art(), SMALL_ART, icon.as_ref());
         imp.name.set_text(&content.name);
         imp.has_selection
             .set(content.subject == content::Subject::Selection);

@@ -22,7 +22,7 @@ const UNSAFE_URL_CHARACTERS: [char; 3] = ['\t', '\r', '\n'];
 /// GIO's schemes for phones, cameras and iOS devices (`DEVICE_SCHEMES` in
 /// `core.py`). Their authorities can contain brackets
 /// (`mtp://[usb:001,002]/`), which ordinary URL parsers reject.
-const DEVICE_SCHEMES: [&str; 3] = ["mtp", "gphoto2", "afc"];
+const DEVICE_SCHEMES: [&str; 4] = ["mtp", "gphoto2", "afc", "google-drive"];
 
 /// The `GVfs` network schemes browsed besides SMB, in their canonical
 /// spelling: SSH (SFTP), FTP, FTP over TLS, WebDAV, WebDAV over HTTPS and

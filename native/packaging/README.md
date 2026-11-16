@@ -369,6 +369,8 @@ flatpak run io.winspace.Development.Native
 | `--device=dri` | GTK 4 renders with the GPU. |
 | `--filesystem=host` | A file manager shows, copies and changes the user's files wherever they are: home, other disks under `/media`, `/run/media` and `/mnt`, `/opt`, `/srv`. |
 | `--talk-name=org.gtk.vfs.*`, `--filesystem=xdg-run/gvfsd`, `--filesystem=xdg-run/gvfs` | GVfs: the sandbox's GIO asks the host's GVfs daemons for `smb://`, `mtp://`, `trash:///` and the drive and phone list, reaches their private sockets, and opens files on shares through their FUSE paths. |
+| `--filesystem=xdg-data/gvfs-metadata:ro` | GIO reads the desktop’s per-file metadata, including custom icons that GNOME Files has assigned. |
+| `--filesystem=xdg-cache/thumbnails` | Shares the desktop thumbnail cache with GNOME Files. |
 | `--talk-name=org.freedesktop.secrets` | Saved SMB passwords live in the desktop's Secret Service under the Python app's schema, so both apps find each other's sign-ins. |
 | `--own-name=org.freedesktop.FileManager1` | "Show in folder" (opt-in): after the user turns it on in Settings, the running app answers browsers' and other apps' requests to show a downloaded file in its folder. Flatpak only permits owning the name; the app claims it only while the integration is on. |
 | `--talk-name=org.freedesktop.Flatpak` | `flatpak-spawn --host`: Open in Terminal starts the host's terminal, and making OpenXplorer the default file manager (opt-in) runs the host's `xdg-mime`. |
@@ -482,6 +484,8 @@ Only the owner can:
   Trash and the drive list come from the host's GVfs: GIO inside the
   sandbox needs the daemons' D-Bus names, their private sockets and their
   FUSE paths.
+- `--filesystem=xdg-data/gvfs-metadata:ro`: GIO reads the host’s per-file metadata
+  for custom icons and folder pictures.
 - `--talk-name=org.freedesktop.secrets`: SMB passwords the user asks to
   remember are stored in the Secret Service, under the schema the 1.x app
   used, so both find the same saved sign-ins.

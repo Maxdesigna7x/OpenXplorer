@@ -194,6 +194,7 @@ fn saved_search_entry(search: &SavedSearch, locations: &LocationContext) -> Side
 fn drive_entry(row: &VolumeRow, locations: &LocationContext) -> SidebarEntry {
     let glyph = match row.kind {
         VolumeKind::Device => Icon::Phone,
+        VolumeKind::Cloud => Icon::Organization,
         VolumeKind::Drive => Icon::HardDrive,
     };
     let (target, tooltip) = match &row.state {
@@ -203,7 +204,11 @@ fn drive_entry(row: &VolumeRow, locations: &LocationContext) -> SidebarEntry {
         VolumeState::Mountable { id } => (RowTarget::MountVolume(id.clone()), row.label.clone()),
     };
     SidebarEntry {
-        section: Section::ThisPc,
+        section: if row.kind == VolumeKind::Cloud {
+            Section::Network
+        } else {
+            Section::ThisPc
+        },
         level: RowLevel::Child,
         label: row.label.clone(),
         icon: Art::Glyph(glyph),
@@ -372,6 +377,7 @@ pub(in crate::window) fn sidebar_entries(
     entries.extend(drives);
     entries.push(network);
     entries.extend(network_rows);
+    entries.extend(places.cloud_volumes.iter().map(|row| drive_entry(row, locations)));
     entries.extend(saved);
     entries
 }

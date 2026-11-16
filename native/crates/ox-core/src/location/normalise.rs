@@ -450,7 +450,28 @@ fn normalise_device_location(address: &str, scheme: &str) -> Result<String, Loca
             "A connected-device address must include a device identifier and path.",
         )));
     };
-    check_device_authority(device.authority)?;
+    if scheme == "google-drive" {
+        // In the GVfs Google mount the authority identifies the online
+        // account. It is not a password or a network login URL.
+        let valid = device.authority.len() <= MAX_DEVICE_AUTHORITY_CHARS
+            && device.authority.split_once('@').is_some_and(|(user, host)| {
+                !user.is_empty()
+                    && !host.is_empty()
+                    && user
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"._+-".contains(&byte))
+                    && host
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b".-".contains(&byte))
+            });
+        if !valid {
+            return Err(LocationError::new(crate::i18n::gettext(
+                "Invalid Google Drive account.",
+            )));
+        }
+    } else {
+        check_device_authority(device.authority)?;
+    }
     let decoded = unquote_without_controls(device.path)?;
     let path = absolute_normal_path(&decoded);
     Ok(format!("{scheme}://{}{}", device.authority, quote_path(&path)))
@@ -523,6 +544,16 @@ mod tests {
     }
 
     /// parity: NAV-034
+    #[test]
+    fn a_google_drive_mount_keeps_its_account_but_rejects_passwords() {
+        assert_eq!(
+            normalise("google-drive://demo@example.com/My%20Drive").unwrap(),
+            "google-drive://demo@example.com/My%20Drive"
+        );
+        assert!(normalise("google-drive://demo:password@example.com/").is_err());
+        assert!(require_item_uri("google-drive://demo@example.com/").is_err());
+    }
+
     #[test]
     fn plain_paths_are_escaped_like_python() {
         assert_eq!(

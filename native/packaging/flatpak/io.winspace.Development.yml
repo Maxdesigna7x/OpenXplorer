@@ -32,6 +32,9 @@ finish-args:
   - --talk-name=org.gtk.vfs.*
   - --filesystem=xdg-run/gvfsd
   - --filesystem=xdg-run/gvfs
+  # Read the host’s per-file custom icons and folder pictures through GIO.
+  - --filesystem=xdg-data/gvfs-metadata:ro
+  - --filesystem=xdg-cache/thumbnails
   # SMB passwords the user asks to remember are kept in the desktop's Secret
   # Service under the Python app's schema io.winspace.SmbCredentials, so both
   # apps find each other's saved sign-ins.

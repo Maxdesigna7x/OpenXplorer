@@ -35,6 +35,7 @@
 //! the secondary button selects the item, and the context menu opens only
 //! when it is released without dragging.
 
+mod dock_hover;
 mod label;
 mod payload;
 
@@ -157,11 +158,13 @@ thread_local! {
 /// pane or This PC's tiles, as the file drag Escape calls off.
 fn remember_file_drag(drag: &gdk::Drag) {
     FILE_DRAG.with(|now| now.borrow().set(Some(drag)));
+    dock_hover::start(&drag.display());
 }
 
 /// The file drag ended: Escape has nothing to call off.
 fn forget_file_drag() {
     FILE_DRAG.with(|now| now.borrow().set(None));
+    dock_hover::stop();
 }
 
 /// Calls off the file drag in progress, as GTK calls a drag off on

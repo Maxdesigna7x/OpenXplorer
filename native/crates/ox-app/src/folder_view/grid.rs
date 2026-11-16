@@ -134,6 +134,8 @@ mod imp {
         pub(super) icon_size: Cell<IconSize>,
         /// The text size, which sizes the cells too.
         pub(super) text_size: Cell<TextSize>,
+        pub(super) tile_gap: Cell<Option<u8>>,
+        pub(super) tile_padding: Cell<Option<u8>>,
         /// The folder's selection model, while the view shows it.
         pub(super) items: RefCell<Option<gtk::MultiSelection>>,
         /// Names each item's group while the folder is grouped.
@@ -167,6 +169,8 @@ mod imp {
                 layout: Cell::new(GridLayout::Icons(IconSize::LARGE)),
                 icon_size: Cell::new(IconSize::LARGE),
                 text_size: Cell::new(TextSize::DEFAULT),
+                tile_gap: Cell::default(),
+                tile_padding: Cell::default(),
                 items: RefCell::default(),
                 group_title: RefCell::default(),
                 grouping: SharedGrouping::default(),
@@ -419,6 +423,16 @@ impl IconView {
         self.fit_lines();
     }
 
+    /// Applies the spacing used by both the icon tiles and column fitting.
+    pub(crate) fn set_tile_spacing(&self, gap: Option<u8>, padding: Option<u8>) {
+        let imp = self.imp();
+        let previous_gap = imp.tile_gap.replace(gap);
+        let previous_padding = imp.tile_padding.replace(padding);
+        if (previous_gap, previous_padding) != (gap, padding) {
+            self.fit_lines();
+        }
+    }
+
     /// Gives the grid the lines its size holds at the current layout and
     /// text size: columns of tiles across its width (see
     /// [`super::icon_size::CellSize::columns_in`]), compact rows down its
@@ -428,7 +442,17 @@ impl IconView {
         let text_size = imp.text_size.get();
         let width = imp.scroller.width();
         let lines = match imp.layout.get() {
-            GridLayout::Icons(size) => cell_size(size, text_size).columns_in(width),
+            GridLayout::Icons(size) => {
+                let mut cell = cell_size(size, text_size);
+                let gap = imp.tile_gap.get();
+                let padding = imp.tile_padding.get();
+                if gap.is_some() || padding.is_some() {
+                    let chrome = i32::from(gap.unwrap_or(4)) + 2 * i32::from(padding.unwrap_or(10));
+                    // Leave room for short names below the smallest icons.
+                    cell.width = (size.pixels() + 16).max(cell.width.min(96)) + chrome;
+                }
+                cell.columns_in(width)
+            }
             GridLayout::Compact => {
                 let rows = imp.scroller.height() / compact_row(text_size).max(1);
                 u32::try_from(rows.max(1)).unwrap_or(1)

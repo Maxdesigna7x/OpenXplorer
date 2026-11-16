@@ -12,6 +12,7 @@ pub(crate) mod accent;
 mod appearance_button;
 pub(crate) mod contrast;
 mod cursor_theme;
+mod custom;
 pub(crate) mod desktop_text;
 mod fonts;
 mod providers;
@@ -23,7 +24,7 @@ use gtk::subclass::prelude::*;
 use gtk::{gdk, gio, glib};
 
 pub(crate) use appearance_button::{tooltip, AppearanceExt};
-use ox_core::settings::{Appearance, Theme};
+use ox_core::settings::{Appearance, AppearanceOptions, Theme};
 
 use crate::icons;
 use crate::text_size::TextSize;
@@ -64,6 +65,7 @@ mod imp {
         pub(super) providers: OnceCell<Providers>,
         /// The appearance the palette draws.
         pub(super) appearance: Cell<Appearance>,
+        pub(super) custom: RefCell<super::AppearanceOptions>,
         /// The desktop's accent drawn over the palette.
         pub(super) accent: Cell<Accent>,
         /// Whether the high-contrast rules are loaded.
@@ -189,8 +191,18 @@ impl Skin {
             return;
         }
         self.providers().draw_palette(appearance);
+        self.providers()
+            .draw_custom(&self.imp().custom.borrow(), appearance);
         self.providers().draw_accent(self.accent(), appearance);
         self.emit_by_name::<()>(APPEARANCE_CHANGED, &[]);
+    }
+
+    /// Draws the shared palette and layout overrides.
+    pub(crate) fn set_custom_appearance(&self, options: &AppearanceOptions) {
+        if &*self.imp().custom.borrow() != options {
+            self.imp().custom.replace(options.clone());
+            self.providers().draw_custom(options, self.appearance());
+        }
     }
 
     /// The text size the user chose, which Ctrl+plus steps from and
@@ -393,6 +405,32 @@ mod tests {
         skin.set_theme(Theme::Dark);
         skin.set_desktop_appearance(Appearance::Light);
         assert_eq!(skin.appearance(), Appearance::Dark);
+    }
+
+    #[gtk::test]
+    fn custom_palettes_follow_theme_and_blue_selection_is_optional() {
+        let _theme = ThemeGuard::keep();
+        let skin = harness::skin();
+        let label = gtk::Label::new(None);
+        #[expect(deprecated, reason = "GTK 4.14 offers no other lookup of a named colour")]
+        let color = |name| label.style_context().lookup_color(name);
+        let mut options = AppearanceOptions::default();
+        options.light.insert("bg".to_owned(), 0xffeedd);
+        options.dark.insert("bg".to_owned(), 0x101217);
+        options.icon_gap = Some(3);
+        options.icon_padding = Some(2);
+        options.corner_radius = Some(12);
+        options.blue_selection = true;
+        skin.set_theme(Theme::Light);
+        skin.set_custom_appearance(&options);
+        assert_eq!(color("ox_bg"), gdk::RGBA::parse("#ffeedd").ok());
+        skin.set_theme(Theme::Dark);
+        assert_eq!(color("ox_bg"), gdk::RGBA::parse("#101217").ok());
+        assert_eq!(color("ox_item_selected"), gdk::RGBA::parse("#225287").ok());
+        options.blue_selection = false;
+        skin.set_custom_appearance(&options);
+        assert_eq!(color("ox_item_selected"), gdk::RGBA::parse("#3d3d3d").ok());
+        skin.set_custom_appearance(&AppearanceOptions::default());
     }
 
     /// The accent the desktop asks for replaces the Windows blue in what

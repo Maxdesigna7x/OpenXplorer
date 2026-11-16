@@ -238,6 +238,9 @@ impl ColumnWidths {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
+    /// Optional palette and layout overrides.
+    #[serde(skip_serializing_if = "super::AppearanceOptions::is_default")]
+    pub appearance_options: super::AppearanceOptions,
     /// The colour theme.
     pub theme: Theme,
     /// Details list or icon grid.
@@ -606,6 +609,7 @@ fn is_automatic_icon_size(size: &u32) -> bool {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            appearance_options: super::AppearanceOptions::default(),
             theme: Theme::default(),
             view: View::default(),
             show_details_pane: false,
@@ -814,6 +818,14 @@ impl Preferences {
             .and_then(|width| bounded_width(width, SIDEBAR_WIDTHS));
         let column_widths = update.column_widths.as_deref().map(ColumnWidths::from_values);
 
+        if let Some(appearance) = &update.appearance_options {
+            self.appearance_options = appearance.clone().bounded();
+        }
+        if let Some(change) = &update.appearance_change {
+            let mut appearance = std::mem::take(&mut self.appearance_options);
+            change.apply(&mut appearance);
+            self.appearance_options = appearance.bounded();
+        }
         replace_if_some(&mut self.theme, update.theme);
         replace_if_some(&mut self.view, update.view);
         replace_if_some(&mut self.show_details_pane, update.show_details_pane);
@@ -981,6 +993,10 @@ impl Preferences {
 /// out-of-range numbers are ignored when applied.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PreferencesUpdate {
+    /// Replaces the appearance overrides.
+    pub appearance_options: Option<super::AppearanceOptions>,
+    /// Changes one part of the latest saved appearance.
+    pub appearance_change: Option<super::AppearanceChange>,
     /// New theme.
     pub theme: Option<Theme>,
     /// New view.
@@ -1151,6 +1167,10 @@ impl PreferencesUpdate {
         let text = |key: &str| values.get(key).and_then(Value::as_str);
         let flag = |key: &str| values.get(key).and_then(Value::as_bool);
         Ok(Self {
+            appearance_change: None,
+            appearance_options: values
+                .get("appearanceOptions")
+                .and_then(|value| serde_json::from_value(value.clone()).ok()),
             theme: text("theme").and_then(Theme::from_key),
             view: text("view").and_then(View::from_key),
             show_details_pane: flag("details"),

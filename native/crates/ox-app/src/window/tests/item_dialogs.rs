@@ -2221,6 +2221,30 @@ fn a_custom_icon_shows_in_the_view_until_the_default_is_restored() {
     assert_eq!(stored, None);
 }
 
+/// Files can assign an icon by its theme name, without an image URI.
+#[gtk::test]
+fn a_folder_shows_its_named_theme_icon() {
+    use crate::folder_view::cells::FileCell;
+
+    let fixture = Fixture::standard();
+    fs::create_dir(fixture.path("Album")).expect("a folder");
+    gtk::gio::File::for_path(fixture.path("Album"))
+        .set_attribute_string(
+            "metadata::custom-icon-name",
+            "folder",
+            gtk::gio::FileQueryInfoFlags::NONE,
+            gtk::gio::Cancellable::NONE,
+        )
+        .expect("the theme icon name is stored");
+
+    let test = TestWindow::open(&fixture.uri());
+    wait_until("the named icon", || {
+        descendants::<FileCell>(&test.window)
+            .iter()
+            .any(|cell| cell.name() == "Album" && cell.shows_custom_icon())
+    });
+}
+
 /// The group box of the Customize tab titled `title`.
 fn group_box(page: &gtk::Widget, title: &str) -> gtk::Widget {
     descendants::<gtk::Frame>(page)

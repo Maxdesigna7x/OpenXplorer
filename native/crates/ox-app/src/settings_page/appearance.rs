@@ -164,6 +164,7 @@ pub(super) fn build(page: &SettingsPage) -> SettingsSection {
     let category = Category::Appearance;
     let appearance = SettingsSection::new(category.title(), category.lead(), PageKind::Category);
     appearance.append_group(&theme_group(page));
+    super::custom_appearance::append_groups(page, &appearance);
     appearance.append_group(&layout_group(page));
     appearance
 }

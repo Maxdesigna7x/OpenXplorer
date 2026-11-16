@@ -97,9 +97,16 @@ impl Capacity {
     }
 
     /// "N free of M", as Windows 11 says it under a drive.
-    fn text(self) -> String {
-        let free = format::pretty_bytes(self.free);
-        let size = format::pretty_bytes(self.size);
+    fn text(self, desktop_units: bool) -> String {
+        let bytes = |value| {
+            if desktop_units {
+                glib::format_size(value).to_string()
+            } else {
+                format::pretty_bytes(value)
+            }
+        };
+        let free = bytes(self.free);
+        let size = bytes(self.size);
         ox_core::i18n::format_message("{free} free of {size}", &[("free", &free), ("size", &size)])
     }
 }
@@ -119,11 +126,17 @@ fn label(text: &str, css_class: &str) -> gtk::Label {
 /// bar's tooltip. Never blocks: the tile or row is drawn first.
 pub(super) fn show_capacity(texts: &gtk::Box, uri: &str, with_text: bool) {
     let file = gio::File::for_uri(uri);
+    let host_root = uri == "file:///" && ox_core::integration::Sandbox::detect().is_flatpak();
     // Held weakly until GIO answers, so measuring never keeps a tile that
     // was replaced meanwhile.
     let texts = texts.downgrade();
     glib::spawn_future_local(async move {
-        let Some(capacity) = measure_capacity(&file).await else {
+        let capacity = if host_root {
+            gio::spawn_blocking(host_root_capacity).await.ok().flatten()
+        } else {
+            measure_capacity(&file).await
+        };
+        let Some(capacity) = capacity else {
             return;
         };
         // A tile replaced while GIO measured shows nothing.
@@ -133,11 +146,41 @@ pub(super) fn show_capacity(texts: &gtk::Box, uri: &str, with_text: bool) {
         let bar = capacity_bar(capacity);
         texts.append(&bar);
         if with_text {
-            texts.append(&label(&capacity.text(), "card-sub"));
+            texts.append(&label(&capacity.text(host_root), "card-sub"));
         } else {
-            bar.set_tooltip_text(Some(&capacity.text()));
+            bar.set_tooltip_text(Some(&capacity.text(host_root)));
         }
     });
+}
+
+/// Reads the real root's filesystem through GIO on the host. The
+/// Flatpak root is a temporary mount and has unrelated capacity.
+fn host_root_capacity() -> Option<Capacity> {
+    let output = std::process::Command::new("flatpak-spawn")
+        .args([
+            "--host",
+            "timeout",
+            "5s",
+            "gio",
+            "info",
+            "-f",
+            "-a",
+            CAPACITY_ATTRIBUTES,
+            "/",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let data = std::str::from_utf8(&output.stdout).ok()?;
+    let number = |key: &str| {
+        data.lines()
+            .find_map(|line| line.trim().strip_prefix(key)?.trim().parse::<u64>().ok())
+    };
+    let size = number("filesystem::size:")?;
+    let free = number("filesystem::free:")?.min(size);
+    (size > 0).then_some(Capacity { size, free })
 }
 
 /// How full the file system of `file` is, or `None` when GIO cannot tell
@@ -278,6 +321,7 @@ pub(super) fn tile_frame(
 fn drive_tile(row: &VolumeRow, cell: CellSize) -> Tile {
     let glyph = match row.kind {
         VolumeKind::Device => Icon::Phone,
+        VolumeKind::Cloud => Icon::Organization,
         VolumeKind::Drive => Icon::HardDrive,
     };
     let key = match &row.state {
@@ -1098,9 +1142,11 @@ fn this_pc(page: &gtk::Box, places: &Places, locations: &LocationContext, text_s
     let drives = std::iter::once(local_disk()).chain(places.drives.iter().cloned());
     let drive_tiles = drives.map(|row| drive_tile(&row, cell)).collect();
     tile_group(page, Group::DevicesAndDrives, drive_tiles);
-    let share_tiles = places.saved_shares.iter();
-    let share_tiles = share_tiles
+    let share_tiles = places
+        .saved_shares
+        .iter()
         .map(|share| share_tile(share, locations, cell))
+        .chain(places.cloud_volumes.iter().map(|row| drive_tile(row, cell)))
         .collect();
     tile_group(page, Group::NetworkLocations, share_tiles);
 }
@@ -1237,6 +1283,6 @@ mod tests {
         };
         let free = format::pretty_bytes(1024);
         let size = format::pretty_bytes(2048);
-        assert_eq!(capacity.text(), format!("{free} free of {size}"));
+        assert_eq!(capacity.text(false), format!("{free} free of {size}"));
     }
 }

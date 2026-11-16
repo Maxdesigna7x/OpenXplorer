@@ -426,7 +426,7 @@ msgstr ""
 msgid "Browse…"
 msgstr ""
 
-#: crates/ox-app/resources/ui/brave-dialog.ui crates/ox-app/resources/ui/network-sign-in.ui crates/ox-app/resources/ui/open-with-dialog.ui crates/ox-app/resources/ui/transfer-panel.ui crates/ox-app/src/archive_view/extract_dialog.rs crates/ox-app/src/dialogs/network_sign_in.rs crates/ox-app/src/properties/restore.rs crates/ox-app/src/properties/window.rs crates/ox-app/src/window/compress_dialog.rs crates/ox-app/src/window/conflict_window.rs crates/ox-app/src/window/file_drop/action.rs crates/ox-app/src/window/picker.rs crates/ox-app/src/window/transfer_panel/failure.rs
+#: crates/ox-app/resources/ui/brave-dialog.ui crates/ox-app/resources/ui/network-sign-in.ui crates/ox-app/resources/ui/open-with-dialog.ui crates/ox-app/resources/ui/transfer-panel.ui crates/ox-app/src/archive_view/extract_dialog.rs crates/ox-app/src/dialogs/network_sign_in.rs crates/ox-app/src/properties/restore.rs crates/ox-app/src/properties/window.rs crates/ox-app/src/settings_page/custom_appearance.rs crates/ox-app/src/window/compress_dialog.rs crates/ox-app/src/window/conflict_window.rs crates/ox-app/src/window/file_drop/action.rs crates/ox-app/src/window/picker.rs crates/ox-app/src/window/transfer_panel/failure.rs
 msgid "Cancel"
 msgstr ""
 
@@ -2650,7 +2650,7 @@ msgstr ""
 msgid "Working on it..."
 msgstr ""
 
-#: crates/ox-app/src/properties/window.rs
+#: crates/ox-app/src/properties/window.rs crates/ox-app/src/settings_page/custom_appearance.rs
 msgid "Apply"
 msgstr ""
 
@@ -3160,6 +3160,138 @@ msgstr ""
 
 #: crates/ox-app/src/settings_page/confirmations.rs
 msgid "ask whether to run programs and scripts confirm execute run program script executable launcher open"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Address and search fields"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Blue file selection"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Content background"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Corner radius"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Custom layout"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Dark palette"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Dividers and borders"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Drive cards"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Hue (°)"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Icon grid gap"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Icon grid padding"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Item under the pointer"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Light palette"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Menu background"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Primary text"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Reset colors"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Reset palette"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Restore the original colors for this theme."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Rounds windows, selections and menus. 0 makes them square. −1 uses the default."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Saturation (%)"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Secondary text"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Selected item"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Sidebar background"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Space between tiles, in pixels. −1 uses the default."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Space inside each tile, in pixels. −1 uses the default."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Title bar"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Toolbar and status bar"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Uses the blue preset in place of the selected-item color in both themes."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Value (%)"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "color colour palette"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "highlight accent selected blue contrast"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "pixels margin spacing density radius padding"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "reset default palette colors"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/default_apps.rs
@@ -4216,6 +4348,10 @@ msgid "Settings cannot be the startup folder."
 msgstr ""
 
 #: crates/ox-app/src/settings_page/startup.rs
+msgid "Start on This PC instead of restoring the previous tabs."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/startup.rs
 msgid "Start up"
 msgstr ""
 
@@ -4229,6 +4365,10 @@ msgstr ""
 
 #: crates/ox-app/src/settings_page/startup.rs
 msgid "Use Home"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/startup.rs
+msgid "Use This PC"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/startup.rs
@@ -6406,6 +6546,10 @@ msgstr ""
 
 #: crates/ox-app/src/window/mounting.rs
 msgid "Finish the current operation before disconnecting."
+msgstr ""
+
+#: crates/ox-app/src/window/navigation.rs
+msgid "Could not open the host root in GNOME Files."
 msgstr ""
 
 #. Keep each {name} as it is: the app puts a value there.
@@ -8593,6 +8737,10 @@ msgstr ""
 msgid "For network folders, use smb://server/share rather than file://server/…"
 msgstr ""
 
+#: crates/ox-core/src/location/normalise.rs
+msgid "Invalid Google Drive account."
+msgstr ""
+
 #: crates/ox-core/src/location/normalise.rs crates/ox-core/src/location/parts.rs
 msgid "Invalid SMB port."
 msgstr ""
@@ -10045,8 +10193,8 @@ msgstr ""
 msgid "File Explorer;file explorer;File Manager;files;folders;SMB;NAS;network;archives;"
 msgstr ""
 
-#: packaging/data/io.winspace.Development.Native.desktop packaging/data/io.winspace.Development.Native.metainfo.xml
-msgid "OpenXplorer Native Preview"
+#: packaging/data/io.winspace.Development.Native.desktop
+msgid "OpenXplorer RANDY"
 msgstr ""
 
 #: packaging/data/io.winspace.Development.Native.desktop packaging/data/io.winspace.Development.Native.metainfo.xml
@@ -10111,6 +10259,10 @@ msgstr ""
 
 #: packaging/data/io.winspace.Development.Native.metainfo.xml packaging/data/io.winspace.Development.metainfo.xml
 msgid "NAS"
+msgstr ""
+
+#: packaging/data/io.winspace.Development.Native.metainfo.xml
+msgid "OpenXplorer Native Preview"
 msgstr ""
 
 #: packaging/data/io.winspace.Development.Native.metainfo.xml packaging/data/io.winspace.Development.metainfo.xml

@@ -15,8 +15,8 @@
 
 use std::path::PathBuf;
 
-use gtk::gio;
-use gtk::prelude::FileExt;
+use gtk::prelude::{FileExt, IconExt};
+use gtk::{gio, glib};
 use ox_core::format;
 use ox_core::location::{is_smb_location, parent_location, ArchiveLocation, LocationContext};
 use ox_core::places::NetworkLocation;
@@ -230,6 +230,8 @@ pub(in crate::window) enum Subject {
 pub(in crate::window) struct PaneContent {
     /// The picture at the top, and the small art beside the name.
     pub preview: Preview,
+    /// Icon from the desktop theme for the item or folder.
+    pub desktop_icon: Option<glib::Variant>,
     /// The item's name, "N items selected", or with nothing selected the
     /// folder's name and count: "Downloads (2 items)".
     pub name: String,
@@ -315,6 +317,7 @@ fn item_content(item: &FileItem, facts: &PaneFacts<'_>) -> PaneContent {
     properties.retain(|property| !property.value.is_empty());
     PaneContent {
         preview: Preview::Art(item.art()),
+        desktop_icon: entry.serialized_icon.clone(),
         name: entry.name.clone(),
         small_icon: !entry.is_dir,
         subject: Subject::Selection,
@@ -339,6 +342,7 @@ fn several_content(items: &[FileItem], facts: &PaneFacts<'_>) -> PaneContent {
         .collect();
     PaneContent {
         preview: Preview::Stack(arts),
+        desktop_icon: None,
         name,
         small_icon: false,
         subject: Subject::Selection,
@@ -365,6 +369,10 @@ fn folder_content(facts: &PaneFacts<'_>) -> PaneContent {
     );
     PaneContent {
         preview: Preview::Art(folder_art(facts)),
+        desktop_icon: uri
+            .starts_with("file:")
+            .then(|| gio::ThemedIcon::new("folder").serialize())
+            .flatten(),
         name,
         small_icon: false,
         subject: Subject::Folder,

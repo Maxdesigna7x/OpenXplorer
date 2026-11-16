@@ -105,9 +105,20 @@ impl PreviewPolicy {
     /// [`Self::allows`] it; with network previews off it asks for a file
     /// on this computer's own disks only.
     pub(crate) fn request(self, entry: &Entry, pixels: i32) -> Option<PreviewRequest> {
-        let request = PreviewRequest::for_entry(entry, pixels).filter(|_| self.allows(entry))?;
-        Some(PreviewRequest {
+        let request = PreviewRequest::for_entry(entry, pixels)?;
+        let existing_only = request.content_type.starts_with("video/") && !self.allows(entry);
+        let allowed = if existing_only {
+            Self {
+                size_limit: None,
+                ..self
+            }
+            .allows(entry)
+        } else {
+            self.allows(entry)
+        };
+        allowed.then_some(PreviewRequest {
             local_only: !self.remote,
+            existing_only,
             ..request
         })
     }
@@ -174,6 +185,8 @@ pub(crate) struct PreviewRequest {
     /// network file system (a kernel share, sshfs, `GVfs`'s mounts) keeps its
     /// icon, as network previews are off ([`network_fs`]).
     pub local_only: bool,
+    /// Only reuse an existing thumbnail, without generating one.
+    pub existing_only: bool,
     /// The file the item stands for, when it is another (a recent item's,
     /// a search result's), which [`Self::local_only`] looks at too.
     pub target_uri: Option<String>,
@@ -189,6 +202,7 @@ impl PreviewRequest {
             modified: entry.modified,
             pixels,
             local_only: false,
+            existing_only: false,
             target_uri: stands_for(entry).map(str::to_owned),
         })
     }
@@ -294,6 +308,9 @@ async fn thumbnail_of(request: &PreviewRequest) -> Option<PathBuf> {
         Some(CachedThumbnail::Valid(path)) => return Some(path),
         Some(CachedThumbnail::Failed) => return None,
         Some(CachedThumbnail::Missing) | None => {}
+    }
+    if request.existing_only {
+        return None;
     }
     let version = (request.uri.clone(), request.modified);
     if FAILED.with_borrow(|failed| failed.contains(&version)) {
@@ -402,7 +419,65 @@ async fn make_thumbnail_with(
             }
         }
     }
+    if request.content_type.starts_with("video/")
+        && ox_core::integration::Sandbox::detect() == ox_core::integration::Sandbox::Flatpak
+        && request.uri.starts_with("file:")
+    {
+        if let Some(path) = host_video_thumbnail(request, cache_dir, flavor, modified).await {
+            return Ok(path);
+        }
+    }
     by_thumbnailer(request, cache_dir, modified, flavor, catalogue, false).await
+}
+
+async fn host_video_thumbnail(
+    request: &PreviewRequest,
+    cache_dir: &Path,
+    flavor: ThumbnailFlavor,
+    modified: u64,
+) -> Option<PathBuf> {
+    let uri = request.uri.clone();
+    let cache_dir = cache_dir.to_path_buf();
+    MAKING
+        .with(Rc::clone)
+        .blocking(move |cancel| {
+            if cancel.is_cancelled() {
+                return None;
+            }
+            let temporary = tempfile::tempdir_in(&cache_dir).ok()?;
+            let output = temporary.path().join("preview.png");
+            let status = std::process::Command::new("flatpak-spawn")
+                .args([
+                    "--host",
+                    "timeout",
+                    "--kill-after=1s",
+                    "12s",
+                    "/usr/bin/totem-video-thumbnailer",
+                    "-s",
+                ])
+                .arg(flavor.pixels().to_string())
+                .arg(&uri)
+                .arg(&output)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .ok()?;
+            if !status.success() || cancel.is_cancelled() {
+                return None;
+            }
+            let pixbuf = picture_guard::decode_to_fit(
+                &gio::File::for_path(output),
+                flavor.pixels(),
+                flavor.pixels(),
+                Limits::DISPLAY,
+                Some(cancel),
+            )
+            .ok()?
+            .pixbuf;
+            writer::save_thumbnail(&cache_dir, &Source { uri, modified }, flavor, &pixbuf).ok()
+        })
+        .await
+        .flatten()
 }
 
 /// The thumbnail of `request` decoded in the app, or why there is none:
@@ -619,6 +694,7 @@ mod tests {
             modified: Some(1_700_000_000),
             pixels: 128,
             local_only: false,
+            existing_only: false,
             target_uri: None,
         }
     }
