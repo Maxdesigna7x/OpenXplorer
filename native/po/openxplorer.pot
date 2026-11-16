@@ -3179,6 +3179,10 @@ msgid "Corner radius"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "Current color"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
 msgid "Custom layout"
 msgstr ""
 
@@ -3192,6 +3196,10 @@ msgstr ""
 
 #: crates/ox-app/src/settings_page/custom_appearance.rs
 msgid "Drive cards"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "HSV values"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/custom_appearance.rs
@@ -3216,6 +3224,10 @@ msgstr ""
 
 #: crates/ox-app/src/settings_page/custom_appearance.rs
 msgid "Menu background"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/custom_appearance.rs
+msgid "New color"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/custom_appearance.rs

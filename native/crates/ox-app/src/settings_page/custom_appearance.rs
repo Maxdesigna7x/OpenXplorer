@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+use std::cell::Cell;
+use std::rc::Rc;
+
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 use ox_core::i18n::gettext;
@@ -209,12 +212,18 @@ fn color_row(page: &SettingsPage, appearance: Appearance, role: &'static ColorRo
         keywords: "color colour palette",
     });
     let button = parts::button("", ButtonStyle::Bordered);
+    let content = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let (swatch, style) = swatch(20, 16);
+    let hex = gtk::Label::new(None);
+    content.append(&swatch);
+    content.append(&hex);
+    button.set_child(Some(&content));
     page.follow_preferences(glib::clone!(
         #[weak]
-        button,
+        hex,
         move |preferences| {
-            let rgb = current_rgb(&preferences.appearance_options, appearance, role);
-            button.set_label(&format!("#{rgb:06X}"));
+            let value = current_rgb(&preferences.appearance_options, appearance, role);
+            show_swatch(&style, &hex, value);
         }
     ));
     button.connect_clicked(glib::clone!(
@@ -234,9 +243,41 @@ fn current_rgb(options: &AppearanceOptions, appearance: Appearance, role: &Color
     palette.get(role.token).copied().unwrap_or(default)
 }
 
+fn swatch(width: i32, height: i32) -> (gtk::Box, gtk::CssProvider) {
+    let swatch = gtk::Box::builder()
+        .width_request(width)
+        .height_request(height)
+        .css_classes(["palette-swatch"])
+        .accessible_role(gtk::AccessibleRole::Presentation)
+        .build();
+    let style = gtk::CssProvider::new();
+    #[allow(deprecated, reason = "The provider applies only to this color sample")]
+    swatch
+        .style_context()
+        .add_provider(&style, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    (swatch, style)
+}
+
+fn show_swatch(style: &gtk::CssProvider, hex: &gtk::Label, rgb: u32) {
+    style.load_from_string(&format!(
+        ".palette-swatch {{ background-color: #{rgb:06X}; border: 1px solid #808080; border-radius: 4px; }}"
+    ));
+    hex.set_label(&format!("#{rgb:06X}"));
+}
+
+fn packed_color(color: &gdk::RGBA) -> u32 {
+    [color.red(), color.green(), color.blue()]
+        .into_iter()
+        .fold(0, |packed, channel| {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let byte = (channel.clamp(0.0, 1.0) * 255.0).round() as u32;
+            (packed << 8) | byte
+        })
+}
+
 #[allow(
     deprecated,
-    reason = "GTK's dialog response supplies Accept, Cancel and Escape"
+    reason = "The GTK HSV widget exposes the editor directly without a preset palette"
 )]
 fn edit_hsv(page: &SettingsPage, appearance: Appearance, role: &'static ColorRole) {
     let Some(parent) = page.root().and_downcast::<gtk::Window>() else {
@@ -250,22 +291,49 @@ fn edit_hsv(page: &SettingsPage, appearance: Appearance, role: &'static ColorRol
     let Ok(color) = gdk::RGBA::parse(format!("#{rgb:06x}")) else {
         return;
     };
-    let (hue, saturation, value) = gtk::rgb_to_hsv(color.red(), color.green(), color.blue());
     let dialog = gtk::Dialog::builder()
         .title(gettext(role.title))
         .transient_for(&parent)
         .modal(true)
+        .default_width(390)
         .build();
     dialog.add_button(&gettext("Cancel"), gtk::ResponseType::Cancel);
     dialog.add_button(&gettext("Apply"), gtk::ResponseType::Accept);
     dialog.set_default_response(gtk::ResponseType::Accept);
     let body = dialog.content_area();
     body.set_spacing(12);
-    body.set_margin_top(18);
-    body.set_margin_bottom(18);
-    body.set_margin_start(20);
-    body.set_margin_end(20);
-    let field = |label: &str, maximum, number| {
+    body.set_margin_top(16);
+    body.set_margin_bottom(16);
+    body.set_margin_start(18);
+    body.set_margin_end(18);
+
+    let editor = gtk::ColorChooserWidget::builder().show_editor(true).build();
+    editor.set_use_alpha(false);
+    editor.set_rgba(&color);
+    body.append(&editor);
+
+    let comparison = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    comparison.set_homogeneous(true);
+    let preview = |title: &str| {
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        let (sample, style) = swatch(100, 30);
+        let hex = gtk::Label::new(None);
+        show_swatch(&style, &hex, rgb);
+        column.append(&gtk::Label::new(Some(title)));
+        column.append(&sample);
+        column.append(&hex);
+        comparison.append(&column);
+        (style, hex)
+    };
+    preview(&gettext("Current color"));
+    let (new_style, new_hex) = preview(&gettext("New color"));
+    body.append(&comparison);
+
+    let inputs = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    let precise = gtk::Expander::new(Some(&gettext("HSV values")));
+    precise.set_child(Some(&inputs));
+    body.append(&precise);
+    let field = |label: &str, maximum| {
         let line = gtk::Box::new(gtk::Orientation::Horizontal, 20);
         let caption = gtk::Label::builder()
             .label(label)
@@ -273,46 +341,71 @@ fn edit_hsv(page: &SettingsPage, appearance: Appearance, role: &'static ColorRol
             .hexpand(true)
             .build();
         let spin = gtk::SpinButton::with_range(0.0, maximum, 0.1);
-        spin.set_value(number);
         spin.set_digits(1);
         spin.update_relation(&[gtk::accessible::Relation::LabelledBy(&[caption.upcast_ref()])]);
         line.append(&caption);
         line.append(&spin);
-        body.append(&line);
+        inputs.append(&line);
         spin
     };
-    let h = field(&gettext("Hue (°)"), 360.0, f64::from(hue) * 360.0);
-    let s = field(&gettext("Saturation (%)"), 100.0, f64::from(saturation) * 100.0);
-    let v = field(&gettext("Value (%)"), 100.0, f64::from(value) * 100.0);
-    let current = gtk::Label::new(None);
-    body.append(&current);
-    let rgb_at = move |h: &gtk::SpinButton, s: &gtk::SpinButton, v: &gtk::SpinButton| {
-        #[allow(clippy::cast_possible_truncation)]
-        let channels = gtk::hsv_to_rgb(
-            (h.value() / 360.0) as f32,
-            (s.value() / 100.0) as f32,
-            (v.value() / 100.0) as f32,
-        );
-        [channels.0, channels.1, channels.2]
-            .into_iter()
-            .fold(0, |packed, channel| {
-                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                let byte = (channel.clamp(0.0, 1.0) * 255.0).round() as u32;
-                (packed << 8) | byte
-            })
+    let h = field(&gettext("Hue (°)"), 360.0);
+    let s = field(&gettext("Saturation (%)"), 100.0);
+    let v = field(&gettext("Value (%)"), 100.0);
+    let sync_numbers = |color: &gdk::RGBA, h: &gtk::SpinButton, s: &gtk::SpinButton, v: &gtk::SpinButton| {
+        let (hue, saturation, value) = gtk::rgb_to_hsv(color.red(), color.green(), color.blue());
+        h.set_value(f64::from(hue) * 360.0);
+        s.set_value(f64::from(saturation) * 100.0);
+        v.set_value(f64::from(value) * 100.0);
     };
-    current.set_label(&format!("#{rgb:06X}"));
+    sync_numbers(&color, &h, &s, &v);
+    let updating = Rc::new(Cell::new(false));
+    editor.connect_rgba_notify(glib::clone!(
+        #[weak]
+        h,
+        #[weak]
+        s,
+        #[weak]
+        v,
+        #[weak]
+        new_sample,
+        #[weak]
+        new_hex,
+        #[strong]
+        updating,
+        move |editor| {
+            let color = editor.rgba();
+            show_swatch(&new_style, &new_hex, packed_color(&color));
+            if !updating.replace(true) {
+                sync_numbers(&color, &h, &s, &v);
+                updating.set(false);
+            }
+        }
+    ));
     for input in [&h, &s, &v] {
         input.connect_value_changed(glib::clone!(
+            #[weak]
+            editor,
             #[weak]
             h,
             #[weak]
             s,
             #[weak]
             v,
-            #[weak]
-            current,
-            move |_| current.set_label(&format!("#{:06X}", rgb_at(&h, &s, &v)))
+            #[strong]
+            updating,
+            move |_| {
+                if updating.replace(true) {
+                    return;
+                }
+                #[allow(clippy::cast_possible_truncation)]
+                let (r, g, b) = gtk::hsv_to_rgb(
+                    (h.value() / 360.0) as f32,
+                    (s.value() / 100.0) as f32,
+                    (v.value() / 100.0) as f32,
+                );
+                editor.set_rgba(&gdk::RGBA::new(r, g, b, 1.0));
+                updating.set(false);
+            }
         ));
     }
     dialog.connect_response(glib::clone!(
@@ -325,7 +418,7 @@ fn edit_hsv(page: &SettingsPage, appearance: Appearance, role: &'static ColorRol
                 v.update();
                 save(
                     &page,
-                    AppearanceChange::Color(appearance, role.token.to_owned(), rgb_at(&h, &s, &v)),
+                    AppearanceChange::Color(appearance, role.token.to_owned(), packed_color(&editor.rgba())),
                 );
             }
             dialog.close();

@@ -1074,3 +1074,38 @@ fn default_apps_reads_which_app_opens_each_route() {
         card.title()
     );
 }
+
+#[gtk::test]
+#[allow(deprecated, reason = "test the direct GTK HSV editor")]
+fn palette_editor_previews_the_original_and_draft_before_saving() {
+    let settings = SettingsTest::open();
+    let row = settings.row("Content background");
+    let button = descendants::<gtk::Button>(&row)
+        .into_iter()
+        .find(|button| button.has_css_class("setting-button"))
+        .expect("a palette button");
+    assert!(descendants::<gtk::Box>(&button)
+        .iter()
+        .any(|sample| sample.has_css_class("palette-swatch")));
+    button.emit_clicked();
+    let dialog = gtk::Window::list_toplevels()
+        .into_iter()
+        .find_map(|widget| widget.downcast::<gtk::Dialog>().ok())
+        .expect("the color editor dialog");
+    let editor = descendants::<gtk::ColorChooserWidget>(&dialog)
+        .into_iter()
+        .next()
+        .expect("the graphical editor");
+    assert!(editor.shows_editor());
+    let original = editor.rgba();
+    let color = gtk::gdk::RGBA::parse("#123456").unwrap();
+    editor.set_rgba(&color);
+    let labels = descendants::<gtk::Label>(&dialog);
+    assert!(labels.iter().any(|label| label.text() == "#123456"));
+    assert_ne!(editor.rgba(), original);
+    assert!(settings.saved_preferences().appearance_options.light.is_empty());
+    dialog.response(gtk::ResponseType::Accept);
+    wait_until("the new color to be saved", || {
+        settings.saved_preferences().appearance_options.light.get("bg") == Some(&0x123456)
+    });
+}
