@@ -14,7 +14,7 @@
 
 use gtk::glib;
 const REPOSITORY: &str = "https://github.com/Maxdesigna7x/OpenXplorer";
-const SOURCE_VERSION: &str = "2.0.18-randy.3";
+const SOURCE_VERSION: &str = "2.0.18-randy.4";
 
 use super::help::REPORT_ISSUE;
 use super::BrowserWindow;
