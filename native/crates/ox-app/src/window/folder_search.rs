@@ -19,7 +19,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib};
 
-use ox_core::location::{same_location, TRASH_URI};
+use ox_core::location::{same_location, PC_URI, TRASH_URI};
 use ox_core::search::{HiddenItems, SearchFacets, SearchIn, SearchQuery, SearchResults};
 
 use crate::folder_view::cells::RowTooltip;
@@ -29,8 +29,9 @@ use crate::folder_view::reconcile;
 use crate::locations::Page;
 use crate::search::{
     merge_results, related_roots, CacheError, Listing, Rerun, SearchCount, SearchInfoStrip, SearchRun,
-    SearchScope, ShownOptions, RESULT_LIMIT,
+    SearchScope, SearchSource, ShownOptions, RESULT_LIMIT,
 };
+use crate::settings_page::{SettingsView, Subpage};
 
 use super::empty_page::EmptyState;
 use super::search_box::ViewKey;
@@ -90,6 +91,28 @@ impl BrowserWindow {
             #[weak(rename_to = window)]
             self,
             move || window.search_box().clear()
+        ));
+        let imp = self.imp();
+        for (button, forward) in [
+            (&imp.local_search_previous, false),
+            (&imp.local_search_next, true),
+        ] {
+            button.connect_clicked(glib::clone!(
+                #[weak(rename_to = window)]
+                self,
+                move |_| {
+                    let turn = window.imp().search.borrow_mut().turn_local_page(forward);
+                    if turn {
+                        window.folder_pane().scroll_to_start();
+                        window.run_search();
+                    }
+                }
+            ));
+        }
+        imp.local_search_settings.connect_clicked(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.open_settings(Some(SettingsView::Subpage(Subpage::IndexedFolders)))
         ));
         self.connect_is_active_notify(|window| {
             if window.is_active() {
@@ -237,7 +260,7 @@ impl BrowserWindow {
     /// landing page.
     fn searched_folder(&self) -> Option<String> {
         let uri = self.current_uri()?;
-        Page::from_uri(&uri).is_none().then_some(uri)
+        (Page::from_uri(&uri).is_none() || same_location(&uri, PC_URI)).then_some(uri)
     }
 
     /// Whether the search box holds a search.
@@ -302,18 +325,52 @@ impl BrowserWindow {
     fn ask_search_cache(&self, run: SearchRun) {
         let query = SearchQuery {
             text: run.text.clone(),
-            scope: (run.scope == SearchScope::ThisFolder).then(|| run.folder.clone()),
+            scope: (run.source != SearchSource::LocalDisks && run.scope == SearchScope::ThisFolder)
+                .then(|| run.folder.clone()),
             limit: RESULT_LIMIT,
             hidden_items: self.hidden_items(),
         };
         let cache = self.context().search_cache().clone();
         let window = self.downgrade();
+        let local = (run.source == SearchSource::LocalDisks).then(|| self.local_search_mounts());
         glib::spawn_future_local(async move {
-            let outcome = cache.search(query, run.cancellable.clone()).await;
+            let outcome = if let Some((mounted, network)) = local {
+                let now = glib::DateTime::now_local()
+                    .unwrap_or_else(|_| glib::DateTime::now_utc().expect("UTC should always be available"));
+                let facets = run.facets.matcher_with(&run.typed, &now);
+                cache
+                    .search_local_disks(
+                        query,
+                        run.offset,
+                        facets,
+                        mounted,
+                        network,
+                        run.cancellable.clone(),
+                    )
+                    .await
+            } else {
+                cache.search(query, run.cancellable.clone()).await
+            };
             if let Some(window) = window.upgrade() {
                 window.finish_search(&run, outcome);
             }
         });
+    }
+
+    /// Mounted local roots, and kernel-mounted network shares to exclude.
+    fn local_search_mounts(&self) -> (Vec<std::path::PathBuf>, Vec<std::path::PathBuf>) {
+        let mounted = self
+            .imp()
+            .volumes
+            .borrow()
+            .iter()
+            .filter(|volume| !volume.is_network())
+            .filter_map(|volume| volume.uri())
+            .filter_map(|uri| glib::filename_from_uri(uri).ok())
+            .map(|(path, _)| path)
+            .collect();
+        let network = self.imp().locations.borrow().network_mounts.clone();
+        (mounted, network)
     }
 
     /// Whether "Show hidden files" is on.
@@ -364,7 +421,9 @@ impl BrowserWindow {
         let active = self.imp().session.borrow().active_id();
         let store = active.and_then(|id| self.tab_store(id));
         let shows_hidden = self.hidden_files_shown();
-        let listing = store.as_ref().filter(|_| run.scope == SearchScope::ThisFolder);
+        let listing = store
+            .as_ref()
+            .filter(|_| run.source != SearchSource::LocalDisks && run.scope == SearchScope::ThisFolder);
         let listing = listing.map(|items| Listing {
             items,
             folder: &run.folder,
@@ -428,6 +487,7 @@ impl BrowserWindow {
             facets: search.facets(),
         };
         let report = search.report().cloned();
+        let local_page = search.local_page();
         let row_tooltip = if search.is_active() {
             RowTooltip::FullPath
         } else {
@@ -437,10 +497,24 @@ impl BrowserWindow {
         drop(search);
         self.search_strip().show_report(report.as_ref(), options);
         self.show_search_layout();
+        self.show_local_search_paging(local_page);
         self.folder_pane().owners().set_row_tooltip(row_tooltip);
         self.update_expandability();
         self.update_content();
         self.update_details_pane();
+    }
+
+    fn show_local_search_paging(&self, page: Option<(usize, bool, bool)>) {
+        let imp = self.imp();
+        imp.local_search_paging.set_visible(page.is_some());
+        if let Some((page, more, loading)) = page {
+            imp.local_search_page.set_label(&ox_core::i18n::format_message(
+                "Indexed local disks · Page {page}",
+                &[("page", &(page + 1).to_string())],
+            ));
+            imp.local_search_previous.set_sensitive(page > 0 && !loading);
+            imp.local_search_next.set_sensitive(more && !loading);
+        }
     }
 
     /// The user chose another scope: the search runs again in it.
@@ -467,7 +541,7 @@ impl BrowserWindow {
         search.set_search_in(search_in);
         search.set_facets(facets);
         drop(search);
-        if search_in_changed {
+        if search_in_changed || self.current_uri().as_deref() == Some(PC_URI) {
             self.run_search();
         } else if facets_changed {
             self.record_search_step(StepChange::New);

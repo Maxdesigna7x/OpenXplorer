@@ -11,7 +11,7 @@
 //! its own matches and the cached ones, because a cached child does not
 //! cover its parent.
 
-use ox_core::location::same_location;
+use ox_core::location::{same_location, PC_URI};
 use ox_core::search::IndexRoot;
 
 /// The search scope the strip offers (`Search scope`, SRCH-011).
@@ -54,12 +54,17 @@ pub(crate) enum SearchSource {
     /// An indexed folder covers it, or the scope is every cached folder:
     /// the cache.
     Cache,
+    /// The indexed roots on available local disks.
+    LocalDisks,
 }
 
 impl SearchSource {
     /// Where a search of `folder` in `scope` looks, given the indexed
     /// folders `roots`.
     pub(crate) fn choose(roots: &[IndexRoot], folder: &str, scope: SearchScope) -> Self {
+        if same_location(folder, PC_URI) {
+            return SearchSource::LocalDisks;
+        }
         if scope == SearchScope::AllCachedFolders {
             return SearchSource::Cache;
         }
@@ -91,6 +96,7 @@ impl SearchSource {
                 ox_core::i18n::gettext_static("Current folder + cached subfolders")
             }
             SearchSource::Cache => ox_core::i18n::gettext_static("Cached names & paths"),
+            SearchSource::LocalDisks => ox_core::i18n::gettext_static("Indexed local disks"),
         }
     }
 }

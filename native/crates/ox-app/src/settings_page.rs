@@ -64,7 +64,6 @@ use crate::window::{show_bundled_clear_icon, show_bundled_magnifier};
 
 pub(crate) use choice_list::ChoiceButton;
 pub(crate) use indexed_folders::{index_candidates, CandidateSources, IndexCandidate};
-#[cfg(test)]
 pub(crate) use pages::Subpage;
 pub(crate) use pages::{Category, SettingsView};
 pub(crate) use row::PageWidth;

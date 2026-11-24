@@ -167,6 +167,37 @@
                                   <object class="OxSearchInfoStrip" id="search_strip"/>
                                 </child>
                                 <child>
+                                  <object class="GtkBox" id="local_search_paging">
+                                    <property name="visible">false</property>
+                                    <property name="spacing">8</property>
+                                    <property name="margin-start">12</property>
+                                    <property name="margin-end">12</property>
+                                    <property name="margin-top">4</property>
+                                    <property name="margin-bottom">4</property>
+                                    <child>
+                                      <object class="GtkLabel" id="local_search_page">
+                                        <property name="hexpand">true</property>
+                                        <property name="xalign">0</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton" id="local_search_settings">
+                                        <property name="label" translatable="yes">Indexed folders</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton" id="local_search_previous">
+                                        <property name="label" translatable="yes">Previous results</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton" id="local_search_next">
+                                        <property name="label" translatable="yes">Next results</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
                                   <!-- The folder pane, and a second one
                                        beside it while the tab is split
                                        (VIEW-059, split_view.rs). -->

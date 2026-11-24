@@ -168,10 +168,13 @@ impl BrowserWindow {
                 marked_words(search.words()),
             )
         };
-        let windows_layout = is_active && !filter_bar;
-        if !filter_bar {
+        let local_disks = self.current_uri().as_deref() == Some(ox_core::location::PC_URI);
+        let windows_layout = is_active && (!filter_bar || local_disks);
+        if !filter_bar || local_disks {
             self.search_strip().set_visible(false);
         }
+        self.set_action_enabled(WindowAction::SearchDepth, !local_disks);
+        self.set_action_enabled(WindowAction::SearchContents, !local_disks);
         self.command_bar().show_search_commands(windows_layout);
         self.update_more_menu();
         self.set_action_state(WindowAction::SearchDepth, &depth.to_variant());

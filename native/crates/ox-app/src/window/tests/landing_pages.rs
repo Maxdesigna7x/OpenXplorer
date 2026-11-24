@@ -133,7 +133,7 @@ fn this_pc_shows_its_groups_with_no_heading_or_quick_access_and_nothing_to_creat
         landing::section_titles(landing) == ["Devices and drives", "Network locations"]
     });
     assert_eq!(test.window.status_bar().texts().0, "Ready");
-    assert!(!test.window.search_box().is_sensitive(), "Search");
+    assert!(test.window.search_box().is_sensitive(), "Search");
     assert!(!is_enabled(&test, "up"), "Up");
     assert!(
         !menu_button_with_class(&test, "new-command").is_sensitive(),

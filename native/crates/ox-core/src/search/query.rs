@@ -12,6 +12,7 @@ use rusqlite::types::Value;
 use rusqlite::{Connection, Row};
 
 use super::error::{check_cancelled, SearchError};
+use super::facets::FacetMatcher;
 use super::index::SearchIndex;
 use super::pattern::{is_wildcard, wildcard_matches, word_in_name};
 use super::root::{HiddenItems, RootStatus, SearchEngine};
@@ -63,6 +64,17 @@ impl SearchQuery {
             hidden_items: HiddenItems::Skip,
         }
     }
+}
+
+/// A page of matches in the selected local index roots.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct LocalSearchPage {
+    /// Index roots on available local disks.
+    pub roots: Vec<String>,
+    /// Matching rows skipped before this page.
+    pub offset: usize,
+    /// Metadata filters applied before paging.
+    pub facets: FacetMatcher,
 }
 
 /// One cached item that matched.
@@ -130,6 +142,28 @@ impl SearchIndex {
         query: &SearchQuery,
         cancellable: Option<&gio::Cancellable>,
     ) -> Result<SearchResults, SearchError> {
+        self.search_page(query, None, cancellable)
+    }
+
+    /// Searches across available local index roots with pagination.
+    ///
+    /// # Errors
+    /// Invalid queries, cancellation, and database errors.
+    pub fn search_local_disks(
+        &self,
+        query: &SearchQuery,
+        page: &LocalSearchPage,
+        cancellable: Option<&gio::Cancellable>,
+    ) -> Result<SearchResults, SearchError> {
+        self.search_page(query, Some(page), cancellable)
+    }
+
+    fn search_page(
+        &self,
+        query: &SearchQuery,
+        page: Option<&LocalSearchPage>,
+        cancellable: Option<&gio::Cancellable>,
+    ) -> Result<SearchResults, SearchError> {
         if let Some(cancellable) = cancellable {
             check_cancelled(cancellable)?;
         }
@@ -140,7 +174,10 @@ impl SearchIndex {
         let limit = query.limit.clamp(1, MAX_RESULT_LIMIT);
         let started = Instant::now();
         let words = query_words(&query.text);
-        if words.is_empty() {
+        if page.map_or_else(
+            || words.is_empty(),
+            |page| page.roots.is_empty() || (words.is_empty() && page.facets == FacetMatcher::default()),
+        ) {
             return Ok(SearchResults {
                 hits: Vec::new(),
                 is_truncated: false,
@@ -148,10 +185,20 @@ impl SearchIndex {
                 elapsed: Duration::ZERO,
             });
         }
-        let plan = QueryPlan::new(&words, scope.as_deref(), query.hidden_items, self.engine(), limit);
+        let plan = QueryPlan::new(
+            &words,
+            scope.as_deref(),
+            query.hidden_items,
+            self.engine(),
+            limit,
+            page,
+        );
         let mut connection = self.connect()?;
         add_name_pattern_function(&connection)?;
         add_name_word_function(&connection)?;
+        if let Some(page) = page.filter(|page| page.facets != FacetMatcher::default()) {
+            add_page_facets_function(&connection, page.facets)?;
+        }
         let mut hits = run_cancellable(&mut connection, &plan, cancellable)?;
         let is_truncated = hits.len() > limit;
         hits.truncate(limit);
@@ -200,6 +247,7 @@ impl QueryPlan {
         hidden_items: HiddenItems,
         engine: SearchEngine,
         limit: usize,
+        page: Option<&LocalSearchPage>,
     ) -> Self {
         let mut plan = Self {
             sql: String::new(),
@@ -214,6 +262,9 @@ impl QueryPlan {
             // the rules the folder's filter uses.
             if is_wildcard(word) {
                 conditions.push(format!("{NAME_PATTERN_FUNCTION}(?, e.name)"));
+                plan.values.push(Value::Text(word.clone()));
+            } else if page.is_some() {
+                conditions.push("instr(e.search_text, ?)>0".to_owned());
                 plan.values.push(Value::Text(word.clone()));
             } else {
                 // The folder may hold the word; in the name, the word
@@ -231,8 +282,20 @@ impl QueryPlan {
         if hidden_items == HiddenItems::Skip {
             conditions.push("e.hidden=0".to_owned());
         }
+        if let Some(page) = page {
+            let placeholders = std::iter::repeat_n("?", page.roots.len())
+                .collect::<Vec<_>>()
+                .join(",");
+            conditions.push(format!("r.uri LIKE 'file:///%' AND e.root IN ({placeholders})"));
+            plan.values.extend(page.roots.iter().cloned().map(Value::Text));
+            if page.facets != FacetMatcher::default() {
+                conditions.push("ox_page_facets(e.name, e.is_dir, e.size, e.modified)".to_owned());
+            }
+        }
         // One row more than the limit tells whether results were cut off.
         plan.values.push(Value::Integer(sql_integer(limit + 1)));
+        plan.values
+            .push(Value::Integer(sql_integer(page.map_or(0, |page| page.offset))));
         plan.sql = format!(
             "SELECT e.uri, e.parent, e.name, e.is_dir, e.size, e.modified, e.type, e.kind, e.hidden, e.seen,
                     r.updated, r.status
@@ -240,7 +303,7 @@ impl QueryPlan {
              WHERE {}
              GROUP BY e.uri
              ORDER BY e.is_dir DESC, e.name COLLATE NOCASE, e.uri
-             LIMIT ?",
+             LIMIT ? OFFSET ?",
             conditions.join(" AND "),
         );
         plan
@@ -310,7 +373,25 @@ fn add_name_word_function(connection: &Connection) -> rusqlite::Result<()> {
     })
 }
 
-/// Runs `plan`, stopping when `cancellable` is cancelled.
+/// Applies metadata options before the page boundary.
+fn add_page_facets_function(connection: &Connection, facets: FacetMatcher) -> rusqlite::Result<()> {
+    let flags = FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC;
+    connection.create_scalar_function("ox_page_facets", 4, flags, move |context| {
+        let name = context.get_raw(0).as_str().unwrap_or_default();
+        let is_dir: bool = context.get(1)?;
+        let size: Option<i64> = context.get(2)?;
+        let modified: f64 = context.get(3)?;
+        Ok(facets.matches_metadata(
+            name,
+            is_dir,
+            size.and_then(|value| u64::try_from(value).ok()),
+            whole_seconds(modified),
+            None,
+        ))
+    })
+}
+
+/// Runs the search, stopping when cancelled.
 fn run_cancellable(
     connection: &mut Connection,
     plan: &QueryPlan,
@@ -395,6 +476,81 @@ mod tests {
     use super::*;
     use crate::search::fixtures::{found_names, listed_file, listed_folder, search, ScannedShare, SHARE};
     use crate::search::scan::ListedItem;
+
+    #[test]
+    fn local_disk_pages_filter_before_paging_and_deduplicate_overlapping_roots() {
+        use crate::search::{Caching, KindFacet, SearchFacets};
+        let share = ScannedShare::new();
+        share.store(&[listed_file(SHARE, "07-report.jpg")]);
+        let roots = [
+            (
+                "file:///example/one",
+                vec!["01-report.txt", "03-report.jpg", "05-report.jpg"],
+            ),
+            (
+                "file:///example/two",
+                vec!["02-report.txt", "04-report.jpg", "06-report.jpg"],
+            ),
+            ("file:///example/offline", vec!["00-report.jpg"]),
+        ];
+        for (root, names) in roots {
+            share
+                .index
+                .configure(root, Caching::Enabled, "", HiddenItems::Skip)
+                .unwrap();
+            let generation = share.index.begin_scan(root).unwrap();
+            let entries: Vec<_> = names.iter().map(|name| listed_file(root, name)).collect();
+            share.index.store_scanned(root, &generation, &entries).unwrap();
+        }
+        let overlap = "file:///example";
+        share
+            .index
+            .configure(overlap, Caching::Enabled, "", HiddenItems::Skip)
+            .unwrap();
+        let generation = share.index.begin_scan(overlap).unwrap();
+        share
+            .index
+            .store_scanned(
+                overlap,
+                &generation,
+                &[listed_file("file:///example/one", "03-report.jpg")],
+            )
+            .unwrap();
+
+        let mut query = SearchQuery::new("jpg");
+        query.limit = 2;
+        let mut page = LocalSearchPage {
+            roots: ["file:///example/one", "file:///example/two", overlap, SHARE]
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            ..LocalSearchPage::default()
+        };
+        let first = share.index.search_local_disks(&query, &page, None).unwrap();
+        assert!(first.is_truncated);
+        assert_eq!(
+            first.hits.iter().map(|hit| hit.name.as_str()).collect::<Vec<_>>(),
+            ["03-report.jpg", "04-report.jpg"]
+        );
+
+        query.text.clear();
+        page.offset = 2;
+        page.facets = SearchFacets {
+            kind: KindFacet::Images,
+            ..SearchFacets::default()
+        }
+        .matcher(&glib::DateTime::now_local().unwrap());
+        let second = share.index.search_local_disks(&query, &page, None).unwrap();
+        assert!(!second.is_truncated);
+        assert_eq!(
+            second
+                .hits
+                .iter()
+                .map(|hit| hit.name.as_str())
+                .collect::<Vec<_>>(),
+            ["05-report.jpg", "06-report.jpg"]
+        );
+    }
 
     /// A search of every cached folder for `text`, returning at most
     /// `limit` hits.
@@ -678,7 +834,7 @@ mod tests {
             .collect();
         share.store(&items);
         let words = vec!["pd".to_owned()];
-        let plan = QueryPlan::new(&words, None, HiddenItems::Skip, SearchEngine::Trigram, 2000);
+        let plan = QueryPlan::new(&words, None, HiddenItems::Skip, SearchEngine::Trigram, 2000, None);
         let mut connection = share.index.connect().unwrap();
         let cancellable = gio::Cancellable::new();
 
@@ -694,7 +850,7 @@ mod tests {
     fn short_words_skip_the_trigram_prefilter() {
         let words = vec!["ab".to_owned(), "a\"b\"c".to_owned()];
 
-        let plan = QueryPlan::new(&words, None, HiddenItems::Skip, SearchEngine::Trigram, 10);
+        let plan = QueryPlan::new(&words, None, HiddenItems::Skip, SearchEngine::Trigram, 10, None);
 
         assert_eq!(plan.values[0], Value::Text("\"a\"\"b\"\"c\"".to_owned()));
         assert_eq!(plan.sql.matches("MATCH ?").count(), 1);
@@ -711,6 +867,7 @@ mod tests {
             HiddenItems::Include,
             SearchEngine::SubstringFallback,
             10,
+            None,
         );
 
         assert!(!plan.sql.contains("names_fts"));

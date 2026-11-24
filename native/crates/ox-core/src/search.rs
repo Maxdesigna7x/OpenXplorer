@@ -63,6 +63,7 @@ mod crawl;
 mod error;
 mod facets;
 mod frequent;
+mod fsearch;
 mod hit;
 mod index;
 mod limits;
@@ -98,12 +99,14 @@ pub use contents::SearchIn;
 pub use error::SearchError;
 pub use facets::{DateFacet, FacetMatcher, KindFacet, SearchFacets, SizeFacet};
 pub use frequent::FrequentIndexing;
+pub use fsearch::FsearchSnapshot;
 pub use index::SearchIndex;
 pub use live::{matches_by_contents, walk_search, walks_subfolders, LiveSearch, LiveSearchEnd};
 pub use pattern::{is_wildcard, NamePattern};
 pub use pins::PinIndexing;
 pub use query::{
-    SearchHit, SearchQuery, SearchResults, DEFAULT_RESULT_LIMIT, MAX_QUERY_CHARS, MAX_RESULT_LIMIT,
+    LocalSearchPage, SearchHit, SearchQuery, SearchResults, DEFAULT_RESULT_LIMIT, MAX_QUERY_CHARS,
+    MAX_RESULT_LIMIT,
 };
 pub use reader::{FolderReader, GioFolderReader};
 pub use root::{

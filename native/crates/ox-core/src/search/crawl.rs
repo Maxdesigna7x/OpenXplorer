@@ -240,7 +240,10 @@ impl Crawl<'_> {
             // A read that failed because of the cancellation reports the
             // cancellation.
             check_cancelled(&self.job.cancellable)?;
-            if matches!(error, SearchError::FrequentFolderTooLarge) {
+            if matches!(
+                error,
+                SearchError::FrequentFolderTooLarge | SearchError::IndexSpaceLow
+            ) {
                 return Err(error);
             }
             self.errors.push(error.to_string());

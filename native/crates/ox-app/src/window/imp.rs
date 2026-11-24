@@ -100,6 +100,21 @@ pub(crate) struct BrowserWindow {
     /// What a search looked at, above the columns while searching.
     #[template_child]
     pub(super) search_strip: TemplateChild<SearchInfoStrip>,
+    /// Paging controls for a search in This PC.
+    #[template_child]
+    pub(super) local_search_paging: TemplateChild<gtk::Box>,
+    /// Current page and scope.
+    #[template_child]
+    pub(super) local_search_page: TemplateChild<gtk::Label>,
+    /// Opens the index settings.
+    #[template_child]
+    pub(super) local_search_settings: TemplateChild<gtk::Button>,
+    /// Goes to the previous page.
+    #[template_child]
+    pub(super) local_search_previous: TemplateChild<gtk::Button>,
+    /// Goes to the next page.
+    #[template_child]
+    pub(super) local_search_next: TemplateChild<gtk::Button>,
     /// The folder pane, on the left of a split tab.
     #[template_child]
     pub(super) folder_pane: TemplateChild<FolderPane>,

@@ -83,6 +83,45 @@ fn typing_filters_a_folder_nobody_indexed_and_says_so() {
     capture(&test.window, "search-folder-filter.png");
 }
 
+/// This PC queries both indexed locations and leaves the landing page
+/// only while the search is active.
+#[gtk::test]
+fn this_pc_searches_across_local_roots_and_pages_through_every_match() {
+    let left = Fixture::standard();
+    let right = Fixture::standard();
+    for number in 0..500 {
+        fs::write(left.path(&format!("cross-disk-{number:03}.jpg")), b"fixture").unwrap();
+    }
+    fs::write(right.path("cross-disk-500.jpg"), b"fixture").unwrap();
+    let test = TestWindow::open(ox_core::location::PC_URI);
+    test.start_search_cache();
+    test.index_folder(&left.uri());
+    test.index_folder(&right.uri());
+    assert!(test.window.search_box().is_sensitive());
+
+    test.search_for("cross-disk jpg");
+    wait_until("500 results in the first page", || test.names().len() == 500);
+    assert_eq!(test.window.folder_pane().page(), Some(PanePage::Listing));
+    let imp = test.window.imp();
+    assert!(imp.local_search_paging.is_visible());
+    assert!(!imp.local_search_previous.is_sensitive());
+    assert!(imp.local_search_next.is_sensitive());
+    imp.local_search_next.emit_clicked();
+    wait_until("the last result from the second indexed root", || {
+        test.names() == ["cross-disk-500.jpg"]
+    });
+    assert!(imp.local_search_previous.is_sensitive());
+    assert!(!imp.local_search_next.is_sensitive());
+    imp.local_search_previous.emit_clicked();
+    wait_until("the first result page is restored", || test.names().len() == 500);
+
+    test.window.search_box().entry().set_text("");
+    wait_until("This PC landing page returns after clearing search", || {
+        test.window.folder_pane().page() == Some(PanePage::Landing)
+    });
+    assert!(!imp.local_search_paging.is_visible());
+}
+
 /// A folder nobody indexed is searched live with its subfolders, and
 /// wildcards work there too.
 ///
