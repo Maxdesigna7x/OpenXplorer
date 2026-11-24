@@ -371,6 +371,7 @@ impl BrowserWindow {
     /// Remembers both panes of the active tab before another tab is shown,
     /// including an inactive pane scrolled without receiving focus.
     pub(super) fn save_tab_view(&self) {
+        self.remember_tab_preview();
         self.save_beside_view();
         // Search results still being found again: the tab keeps where it
         // was in them.
@@ -560,6 +561,8 @@ impl BrowserWindow {
             return;
         }
         self.context().reload_settings();
+        self.folder_tree().invalidate();
+        self.follow_with_folder_tree();
         self.save_selection();
         let active = self.imp().session.borrow().active_id();
         if let Some(id) = active {

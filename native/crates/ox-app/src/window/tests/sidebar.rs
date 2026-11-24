@@ -140,7 +140,7 @@ fn settle_frames(test: &TestWindow) {
 
 /// parity: SIDE-001
 #[gtk::test]
-fn quick_access_has_no_heading_and_this_pc_opens_from_its_name() {
+fn quick_access_has_a_heading_and_this_pc_opens_from_its_name() {
     let fixture = Fixture::standard();
     let test = TestWindow::open(&fixture.uri());
     let sidebar = test.window.sidebar();
@@ -150,11 +150,8 @@ fn quick_access_has_no_heading_and_this_pc_opens_from_its_name() {
         .iter()
         .map(|label| label.text().to_string())
         .collect();
-    assert!(
-        !texts.iter().any(|text| text.contains("Quick access")),
-        "{texts:?}"
-    );
-    for group in ["This PC", "Network"] {
+    assert!(texts.iter().any(|text| text == "Quick access"), "{texts:?}");
+    for group in ["Quick access", "This PC", "Network"] {
         let chevron = section_chevron(&test, group);
         assert_eq!(
             chevron.action_name().as_deref(),

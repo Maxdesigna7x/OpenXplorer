@@ -302,6 +302,12 @@ pub(in crate::window) fn view_menu() -> Vec<MenuEntry> {
             WindowAction::FolderTree,
         )
         .into(),
+        MenuItem::new(
+            &gettext("Calculate folder sizes"),
+            Icon::HardDrive,
+            WindowAction::CalculateFolderSizes,
+        )
+        .into(),
         // Dolphin's Terminal panel embeds Konsole; VTE for GTK 4 is not
         // available everywhere the app ships, so this opens the desktop's
         // terminal in the folder shown instead (OPEN-022).

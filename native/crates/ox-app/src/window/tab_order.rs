@@ -309,10 +309,7 @@ impl BrowserWindow {
                     None => list.child_focus(gtk::DirectionType::TabForward),
                 }
             }
-            Stop::FolderTree => self
-                .sidebar()
-                .folder_tree()
-                .child_focus(gtk::DirectionType::TabForward),
+            Stop::FolderTree => self.folder_tree().focus_selected(),
             // The tab in front, the strip's one stop (ACC-008), before its
             // Close button; GTK would go to the button first.
             Stop::Tabs => {

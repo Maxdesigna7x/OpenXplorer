@@ -720,6 +720,7 @@ fn walk_the_tab_order(test: &TestWindow, pointer: &mut Pointer, theme: &str) {
                 Stop::Search,
                 Stop::Commands,
                 Stop::Places,
+                Stop::FolderTree,
             ])
             .chain([Stop::SidebarResizer])
             .collect::<Vec<_>>(),
@@ -980,6 +981,7 @@ fn every_control_the_window_shows_is_a_tab_stop_that_draws_its_focus() {
     assert_eq!(
         stops,
         [
+            Stop::FolderTree,
             Stop::SidebarResizer,
             Stop::NetworkInfoBar,
             Stop::SearchStrip,

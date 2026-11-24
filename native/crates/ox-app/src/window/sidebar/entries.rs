@@ -104,6 +104,8 @@ pub(in crate::window) enum RowTarget {
     /// Nothing: the drop tail of an empty Quick access, which only takes
     /// dropped folders to pin (DND-014).
     PinDropTail,
+    /// Toggles the Quick access group.
+    QuickAccess,
     /// Opens the folder of a saved search and runs it again (SRCH-038).
     SavedSearch(SavedSearch),
 }
@@ -166,7 +168,7 @@ pub(in crate::window) fn place_entry(place: &Place, locations: &LocationContext)
     };
     SidebarEntry {
         section: Section::QuickAccess,
-        level: RowLevel::Place,
+        level: RowLevel::Child,
         label: place.label.clone(),
         icon: Art::for_quick_access(place.known_folder, storage),
         target: RowTarget::Location(place.uri.clone()),
@@ -319,7 +321,7 @@ pub(super) fn local_disk_menu() -> PlaceMenu {
 fn pin_drop_tail() -> SidebarEntry {
     SidebarEntry {
         section: Section::QuickAccess,
-        level: RowLevel::Place,
+        level: RowLevel::Child,
         label: ox_core::i18n::gettext("Pin to Quick access"),
         icon: Art::Glyph(Icon::Add),
         target: RowTarget::PinDropTail,
@@ -367,7 +369,16 @@ pub(in crate::window) fn sidebar_entries(
     let saved = searches
         .iter()
         .map(|search| saved_search_entry(search, locations));
-    let mut entries = vec![home];
+    let quick_header = SidebarEntry {
+        target: RowTarget::QuickAccess,
+        ..fixed_entry(
+            Section::QuickAccess,
+            message_id("Quick access"),
+            Art::Glyph(Icon::Star),
+            "",
+        )
+    };
+    let mut entries = vec![home, quick_header];
     entries.extend(quick_access);
     if places.quick_access.is_empty() {
         entries.push(pin_drop_tail());
@@ -539,6 +550,7 @@ mod tests {
             labels(&entries),
             [
                 "Home",
+                "Quick access",
                 "Projects",
                 "This PC",
                 "Local Disk",
@@ -557,7 +569,7 @@ mod tests {
             .collect();
         assert_eq!(
             dividers,
-            ["Projects", "This PC", "Search for budget in Projects"],
+            ["Quick access", "This PC", "Search for budget in Projects"],
             "no divider between This PC and Network, as in Windows 11"
         );
     }
@@ -567,7 +579,7 @@ mod tests {
     fn an_empty_quick_access_keeps_a_drop_tail_to_pin_into() {
         let entries = entries_for(&SettingsData::default(), &[]);
 
-        let tail = &entries[1];
+        let tail = &entries[2];
         assert_eq!(tail.label, "Pin to Quick access");
         assert_eq!(tail.target, RowTarget::PinDropTail);
         assert_eq!(tail.section, Section::QuickAccess);

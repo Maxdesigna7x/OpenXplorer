@@ -58,6 +58,8 @@ pub(super) enum PlaceMenu {
     },
     /// A network location in the sidebar (`networkLocationMenu`).
     Network(NetworkLocation),
+    /// A Quick access tile on This PC.
+    PinnedFolder { uri: String },
     /// A saved share's card on This PC (`shares()`).
     SavedShare {
         /// The saved share.
@@ -485,7 +487,9 @@ impl PlaceMenu {
     /// The location the menu is about, which may be cached for search.
     fn location(&self) -> Option<&str> {
         match self {
-            PlaceMenu::Drive { uri, .. } | PlaceMenu::SavedShare { uri } => Some(uri),
+            PlaceMenu::Drive { uri, .. }
+            | PlaceMenu::SavedShare { uri }
+            | PlaceMenu::PinnedFolder { uri } => Some(uri),
             PlaceMenu::Network(location) => Some(&location.uri),
             PlaceMenu::Volume { .. }
             | PlaceMenu::RecycleBin { .. }
@@ -515,6 +519,26 @@ impl PlaceMenu {
             PlaceMenu::RecycleBin { has_items } => recycle_bin_entries(*has_items),
             PlaceMenu::RecentFiles => recent_files_entries(),
             PlaceMenu::RecentLocations => recent_locations_entries(),
+            PlaceMenu::PinnedFolder { uri } => vec![
+                item(
+                    ox_core::i18n::gettext_static("Open"),
+                    Icon::Folder,
+                    WindowAction::GoTo,
+                    uri,
+                ),
+                item(
+                    ox_core::i18n::gettext_static("Open in new tab"),
+                    Icon::Add,
+                    WindowAction::OpenTab,
+                    uri,
+                ),
+                item(
+                    ox_core::i18n::gettext_static("Properties"),
+                    Icon::Info,
+                    WindowAction::PropertiesOf,
+                    uri,
+                ),
+            ],
             PlaceMenu::SavedShare { uri } => {
                 let mut entries = vec![
                     item(

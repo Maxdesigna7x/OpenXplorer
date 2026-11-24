@@ -440,6 +440,18 @@ impl FolderTree {
         Some((position, row))
     }
 
+    /// Enters the tree on the row following the current folder.
+    pub(super) fn focus_selected(&self) -> bool {
+        let Some(view) = self.imp().view.get() else {
+            return false;
+        };
+        let focused = view.grab_focus();
+        if let Some((position, _)) = self.selected_row() {
+            self.focus_row(position);
+        }
+        focused
+    }
+
     /// Selects, focuses and scrolls to the row at `position`.
     fn focus_row(&self, position: u32) {
         let Some(view) = self.imp().view.get() else {

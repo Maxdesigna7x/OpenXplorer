@@ -191,7 +191,7 @@ fn ctrl_z_undoes_from_the_tree_and_a_split_pane_but_not_in_a_text_field() {
     // The fixture's temporary folder plays the home folder, so the tree
     // never lists the real disk.
     test.window.imp().locations.borrow_mut().home = fixture.root().parent().map(Into::into);
-    test.activate("folder-tree", None);
+    test.window.follow_with_folder_tree();
     let tree = test.window.folder_tree();
     wait_until("the tree to list the folder", || tree.selected_uri().is_some());
     let tree_list = descendants::<gtk::ListView>(tree).remove(0);

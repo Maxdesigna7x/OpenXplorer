@@ -69,7 +69,7 @@ fn window_with_tree(fixture: &Fixture) -> (TestWindow, String) {
     // The fixture's temporary folder plays the home folder, so the tree
     // starts there and never lists the real disk.
     test.window.imp().locations.borrow_mut().home = fixture.root().parent().map(Into::into);
-    test.activate("folder-tree", None);
+    test.window.follow_with_folder_tree();
     let reports = file_uri(&reports);
     let tree = test.window.folder_tree();
     wait_until("the tree selects the folder shown", || {
@@ -181,10 +181,10 @@ fn ctrl_shift_e_opens_the_navigation_pane_down_to_the_folder_shown() {
     let fixture = Fixture::standard();
     let (test, reports) = window_with_tree(&fixture);
     let tree = test.window.folder_tree();
-    assert!(
-        !tree.outline().iter().any(|line| line.trim() == "2026"),
-        "the folder shown is not open yet"
-    );
+    wait_until("the current folder to expand automatically", || {
+        tree.outline().iter().any(|line| line.trim() == "2026")
+    });
+    assert!(press_on(&tree_view(&test), gdk::Key::KP_Subtract));
     test.window.folder_pane().focus_view();
 
     assert!(press_shortcut_where_focused(
@@ -220,6 +220,7 @@ fn ctrl_shift_e_opens_the_navigation_pane_down_to_the_folder_shown() {
 fn ctrl_shift_e_without_the_tree_focuses_the_places_row() {
     let fixture = Fixture::standard();
     let test = TestWindow::open(&fixture.uri());
+    test.activate("folder-tree", None);
     let list = test.window.sidebar().list();
     let location_row = list.selected_row().expect("a place holds the location").index();
     let other = list
@@ -263,6 +264,8 @@ fn the_keypad_keys_open_and_close_folders_in_the_folder_tree() {
     let tree = test.window.folder_tree();
     let view = tree_view(&test);
     let shows = |name: &str| tree.outline().iter().any(|line| line.trim() == name);
+    wait_until("Reports opens by default", || shows("2026"));
+    assert!(press_on(&view, gdk::Key::KP_Subtract));
     assert!(shows("Reports") && !shows("2026"));
 
     assert!(press_on(&view, gdk::Key::KP_Add), "plus opens the folder");
@@ -358,6 +361,8 @@ fn the_folder_tree_keys_work_with_num_lock_on() {
     let tree = test.window.folder_tree();
     let view = tree_view(&test);
     let shows = |name: &str| tree.outline().iter().any(|line| line.trim() == name);
+    wait_until("Reports opens by default", || shows("2026"));
+    assert!(press_on(&view, gdk::Key::KP_Subtract));
     assert!(shows("Reports") && !shows("2026"));
 
     assert!(

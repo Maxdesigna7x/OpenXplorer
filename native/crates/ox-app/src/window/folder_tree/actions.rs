@@ -4,6 +4,7 @@
 //! (`win.folder-tree-option`), both saved for every window, and the tree
 //! following the active tab.
 
+use gtk::gio;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use ox_core::settings::FolderTreeOptions;
@@ -78,9 +79,30 @@ impl BrowserWindow {
     pub(in crate::window) fn follow_with_folder_tree(&self) {
         let uri = self.current_uri().filter(|uri| Page::from_uri(uri).is_none());
         let home = self.imp().locations.borrow().home_uri();
-        self.folder_tree().follow(uri.as_deref(), &home, |uri| {
-            self.imp().locations.borrow().title_for(uri)
+        let mount = uri.as_deref().and_then(|uri| {
+            let folder = gio::File::for_uri(uri);
+            self.imp()
+                .volumes
+                .borrow()
+                .iter()
+                .filter_map(|volume| Some((volume.uri()?, volume.label.as_str())))
+                .filter_map(|(uri, label)| {
+                    let root = gio::File::for_uri(uri);
+                    (folder.equal(&root) || folder.has_prefix(&root)).then(|| (root, label.to_owned()))
+                })
+                .max_by_key(|(root, _)| root.uri().len())
         });
+        self.folder_tree().follow(
+            uri.as_deref(),
+            &home,
+            mount.as_ref().map(|(root, _)| root.clone()),
+            |uri| {
+                if let Some((_, label)) = &mount {
+                    return label.clone();
+                }
+                self.imp().locations.borrow().title_for(uri)
+            },
+        );
     }
 
     /// Whether what the clipboard holds can be pasted into the folder `uri`

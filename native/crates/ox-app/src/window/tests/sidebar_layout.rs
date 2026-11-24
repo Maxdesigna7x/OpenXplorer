@@ -65,6 +65,9 @@ fn with_two_pins(fixture: &Fixture) -> TestWindow {
 fn pinned_rows_line_up_with_home_on_the_32_pixel_pitch() {
     let fixture = Fixture::standard();
     let test = with_two_pins(&fixture);
+    test.window.imp().volumes.replace(Vec::new());
+    test.window.render_places();
+    wait_for_frames(&test.window, 2);
     let home = bounds(&test, &row_named(&test, "Home"));
     assert_eq!(
         home,
@@ -105,7 +108,8 @@ fn pinned_rows_line_up_with_home_on_the_32_pixel_pitch() {
     };
     let column = icon_x("Home");
     assert_eq!(column, 28, "a chevron's room before the icon");
-    assert_eq!(icon_x("Documents"), column, "pins line up with Home");
+    assert_eq!(icon_x("Quick access"), column, "the heading lines up with Home");
+    assert_eq!(icon_x("Documents"), column + 16, "pins are a level in");
     assert_eq!(icon_x("This PC"), column, "This PC's chevron sits in that room");
     assert_eq!(icon_x("Network"), column);
     assert_eq!(icon_x("Local Disk"), column + 16, "drives are a level in");

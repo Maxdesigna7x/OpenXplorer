@@ -2,7 +2,7 @@
 //! The folder tree's model: one root folder whose subfolders a
 //! `GtkTreeListModel` lists level by level.
 //!
-//! A folder's subfolders are a monitored `GtkDirectoryList`, filtered to
+//! A folder's subfolders are an asynchronous `GtkDirectoryList`, filtered to
 //! folders and sorted by name as the details view sorts them. The list
 //! is created when GTK asks whether the row can expand, but it reads the
 //! folder only once the row is expanded ([`load_children`]), so the tree
@@ -79,8 +79,12 @@ pub(super) fn load_children(row: &gtk::TreeListRow) -> Option<gtk::DirectoryList
     if let Some(listing) = filtered.model().and_downcast::<gtk::DirectoryList>() {
         return Some(listing);
     }
-    let listing = gtk::DirectoryList::new(Some(ATTRIBUTES), Some(&row_file(row)?));
-    listing.set_monitored(true);
+    // A tree can drop an expanded ancestor and its listing while switching
+    // drives. Keep the listing independent of pending monitor notifications.
+    let file = row_file(row)?;
+    let listing = gtk::DirectoryList::new(Some(ATTRIBUTES), None::<&gio::File>);
+    listing.set_monitored(false);
+    listing.set_file(Some(&file));
     filtered.set_model(Some(&listing));
     Some(listing)
 }

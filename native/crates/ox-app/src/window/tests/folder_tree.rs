@@ -21,7 +21,7 @@ fn the_folder_tree_opens_down_to_the_folder_shown_and_opens_the_folder_clicked()
     // starts there and never lists the real disk.
     test.window.imp().locations.borrow_mut().home = fixture.root().parent().map(Into::into);
 
-    test.activate("folder-tree", None);
+    test.window.follow_with_folder_tree();
     let tree = test.window.folder_tree();
     let reports = file_uri(&reports);
     wait_until("the tree selects the folder shown", || {
@@ -35,6 +35,15 @@ fn the_folder_tree_opens_down_to_the_folder_shown_and_opens_the_folder_clicked()
         ["Home", "  Example projects", "    Documents", "      Reports"],
         "only folders, no hidden one, each opened only on the way"
     );
+    let new_folder = fixture.path("Documents/New folder");
+    fs::create_dir(&new_folder).expect("a new fixture folder");
+    let new_uri = file_uri(&new_folder);
+    test.window.navigate(&new_uri).expect("the new folder opens");
+    wait_until("the tree to find the new folder", || {
+        tree.selected_uri()
+            .is_some_and(|uri| same_location(&uri, &new_uri))
+    });
+
     tree.activate_row(1);
     wait_until("the clicked folder opens", || {
         test.window
