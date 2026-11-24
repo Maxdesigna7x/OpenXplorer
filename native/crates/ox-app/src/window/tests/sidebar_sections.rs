@@ -188,3 +188,20 @@ fn a_click_on_a_chevron_opens_no_place() {
     wait_for_frames(&test.window, 2);
     assert_eq!(test.tab_listing_needs().len(), tabs, "no tab opened");
 }
+
+#[gtk::test]
+fn quick_access_can_collapse_independently_of_this_pc() {
+    let fixture = Fixture::standard();
+    let test = TestWindow::open(&fixture.uri());
+    test.activate("pin-folder", None);
+    wait_until("the pinned folder", || shows(&test, "Example projects"));
+
+    section_chevron(&test, "Quick access").emit_clicked();
+    assert!(!shows(&test, "Example projects"));
+    assert!(shows(&test, "Local Disk"));
+    assert!(test.window.sidebar().section_is_collapsed("quickAccess"));
+
+    row_named(&test, "Quick access").activate();
+    assert!(shows(&test, "Example projects"));
+    assert_eq!(test.window.current_uri().as_deref(), Some(fixture.uri().as_str()));
+}

@@ -189,6 +189,8 @@ impl Sidebar {
             .orientation(gtk::Orientation::Vertical)
             .start_child(&scroller)
             .end_child(&folder_tree)
+            .position(420)
+            .resize_start_child(true)
             .shrink_start_child(false)
             .shrink_end_child(false)
             .vexpand(true)
@@ -532,7 +534,10 @@ impl Sidebar {
         let entries = self.imp().entries.borrow();
         match &entries.get(index)?.target {
             RowTarget::Location(uri) => Some(uri.clone()),
-            RowTarget::MountVolume(_) | RowTarget::PinDropTail | RowTarget::SavedSearch(_) => None,
+            RowTarget::MountVolume(_)
+            | RowTarget::QuickAccess
+            | RowTarget::PinDropTail
+            | RowTarget::SavedSearch(_) => None,
         }
     }
 
@@ -703,7 +708,10 @@ fn tab_action_for_click(modifiers: gdk::ModifierType) -> Option<WindowAction> {
 fn closest_place(entries: &[SidebarEntry], uri: &str) -> Option<usize> {
     let location = |entry: &SidebarEntry| match &entry.target {
         RowTarget::Location(candidate) => Some(candidate.clone()),
-        RowTarget::MountVolume(_) | RowTarget::PinDropTail | RowTarget::SavedSearch(_) => None,
+        RowTarget::MountVolume(_)
+        | RowTarget::QuickAccess
+        | RowTarget::PinDropTail
+        | RowTarget::SavedSearch(_) => None,
     };
     let exact = entries
         .iter()

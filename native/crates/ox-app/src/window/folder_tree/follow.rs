@@ -19,28 +19,47 @@ impl FolderTree {
     /// the next [`Self::follow`] where its folders or its top change.
     pub(super) fn set_options(&self, options: FolderTreeOptions) {
         let old = self.imp().options.replace(options);
-        self.set_visible(options.shown);
+        self.set_visible(options.shown && self.imp().shown.borrow().is_some());
         if old.show_hidden != options.show_hidden || old.limit_to_home != options.limit_to_home {
             self.imp().root.replace(None);
         }
     }
 
-    /// Follows the active tab to `uri`, `None` on a page; `home` is the
-    /// home folder's location and `title_of` names the tree's top.
-    pub(super) fn follow(&self, uri: Option<&str>, home: &str, title_of: impl Fn(&str) -> String) {
+    /// Discards old directory lists before an explicit folder refresh.
+    pub(in crate::window) fn invalidate(&self) {
+        self.imp().root.replace(None);
+    }
+
+    /// Follows the active tab, using its mounted volume as the top when one applies.
+    pub(super) fn follow(
+        &self,
+        uri: Option<&str>,
+        home: &str,
+        mount: Option<gio::File>,
+        title_of: impl Fn(&str) -> String,
+    ) {
         let imp = self.imp();
         let shown = uri.map(gio::File::for_uri);
-        imp.shown.replace(shown.clone());
+        let previous = imp.shown.replace(shown.clone());
         let Some(selection) = imp.selection.get() else {
             return;
         };
         let options = imp.options.get();
+        self.set_visible(options.shown && shown.is_some());
         let Some(shown) = shown.filter(|_| options.shown) else {
+            self.imp().walk.set(imp.walk.get() + 1);
             selection.set_selected(gtk::INVALID_LIST_POSITION);
             return;
         };
-        let root = tree_root(&shown, &gio::File::for_uri(home), options.limit_to_home);
+        let root =
+            mount.unwrap_or_else(|| tree_root(&shown, &gio::File::for_uri(home), options.limit_to_home));
         let same_root = imp.root.borrow().as_ref().is_some_and(|old| old.equal(&root));
+        if same_root
+            && previous.is_some_and(|old| old.equal(&shown))
+            && selection.selected() != gtk::INVALID_LIST_POSITION
+        {
+            return;
+        }
         if !same_root {
             let tree = model::tree_model(&root, &title_of(&root.uri()), options.show_hidden);
             selection.set_model(Some(&tree));
@@ -105,19 +124,34 @@ impl FolderTree {
                 return;
             };
             if file.equal(target) {
+                row.set_expanded(true);
+                model::load_children(&row);
                 break;
             }
             row.set_expanded(true);
-            if let Some(listing) = model::load_children(&row) {
-                model::loaded(&listing).await;
-            }
+            let Some(listing) = model::load_children(&row) else {
+                break;
+            };
+            let was_loaded = !listing.is_loading();
+            model::loaded(&listing).await;
             if self.imp().walk.get() != walk {
                 return;
             }
-            match self.child_towards(&row, target) {
-                Some(child) => row = child,
-                None => break,
+            let mut child = self.child_towards(&row, target);
+            if child.is_none() && was_loaded {
+                // The user may have opened a directory just created in the listing.
+                listing.set_file(None::<&gio::File>);
+                listing.set_file(Some(&file));
+                model::loaded(&listing).await;
+                if self.imp().walk.get() != walk {
+                    return;
+                }
+                child = self.child_towards(&row, target);
             }
+            let Some(child) = child else {
+                break;
+            };
+            row = child;
         }
         self.mark(row.position());
     }

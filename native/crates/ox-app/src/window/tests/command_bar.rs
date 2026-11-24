@@ -919,7 +919,7 @@ fn escape_or_left_closes_only_a_submenu_the_pointer_opened() {
 /// largest icons to Details, Tiles and Content, the Details pane, Show,
 /// then Dolphin's split view, folder tree and terminal where they were
 /// before Show, and the text size.
-const VIEW_MENU: [&str; 20] = [
+const VIEW_MENU: [&str; 21] = [
     "Extra large icons",
     "Large icons",
     "Medium icons",
@@ -935,6 +935,7 @@ const VIEW_MENU: [&str; 20] = [
     "-",
     "Split view",
     "Folder tree",
+    "Calculate folder sizes",
     "Terminal",
     "-",
     "Larger text",

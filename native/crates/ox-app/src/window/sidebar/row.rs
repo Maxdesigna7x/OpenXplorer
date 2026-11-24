@@ -250,6 +250,7 @@ pub(super) fn sidebar_row(entry: &SidebarEntry, look: RowLook, collapsed: bool) 
         RowTarget::Location(uri) => (WindowAction::GoTo, uri.to_variant()),
         RowTarget::MountVolume(id) => (WindowAction::MountVolume, id.to_variant()),
         RowTarget::SavedSearch(search) => (WindowAction::OpenSavedSearch, saved_search_target(search)),
+        RowTarget::QuickAccess => (WindowAction::ToggleSidebarSection, "quickAccess".to_variant()),
         RowTarget::PinDropTail => {
             row.set_activatable(false);
             row.set_selectable(false);

@@ -30,7 +30,7 @@ pub struct FolderTreeOptions {
 impl Default for FolderTreeOptions {
     fn default() -> Self {
         Self {
-            shown: false,
+            shown: true,
             show_hidden: false,
             limit_to_home: true,
             auto_scroll: true,

@@ -26,6 +26,7 @@ mod drag_marks;
 mod edge_scroll;
 mod edges;
 mod live_drag;
+mod preview;
 
 use std::cell::Cell;
 
@@ -124,6 +125,7 @@ mod imp {
         pub(super) edges: OnceCell<super::edges::Edges>,
         /// Each tab shown and its widget, left to right.
         pub(super) shown: RefCell<Vec<(TabView, gtk::Box)>>,
+        pub(super) previews: RefCell<super::preview::Previews>,
         /// The tab last grabbed for a drag, and where along it.
         pub(super) grab: Cell<Option<(TabId, (f64, f64))>>,
         /// Tabs given while a drag lasts, shown once it is over.
@@ -264,6 +266,7 @@ impl TabStrip {
             return;
         }
         imp.waiting_tabs.replace(None);
+        imp.previews.borrow_mut().retain(tabs);
         // A tab being shown by the keyboard keeps focus in the strip.
         let had_focus = imp.tab_list.focus_child().is_some();
         // A tab that only came to the front or moved keeps its widget, so a
@@ -509,6 +512,7 @@ fn tab_widget(tab: &TabView) -> gtk::Box {
     }));
     widget.add_controller(menu_on_right_click(tab.id));
     widget.add_controller(menu_on_keys(tab.id));
+    preview::attach(&widget, tab.clone());
     widget
 }
 

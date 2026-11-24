@@ -89,7 +89,9 @@ impl Sidebar {
         let entry = entries.get(usize::try_from(index).ok()?)?;
         let uri = match &entry.target {
             RowTarget::Location(uri) => uri,
-            RowTarget::PinDropTail => return Some(SidebarDropSpot::Pin { index, before: None }),
+            RowTarget::PinDropTail | RowTarget::QuickAccess => {
+                return Some(SidebarDropSpot::Pin { index, before: None });
+            }
             // A drive still to be mounted takes the drop and is mounted
             // first, as Dolphin's places panel does (DEV-010).
             RowTarget::MountVolume(id) if entry.section != Section::QuickAccess => {

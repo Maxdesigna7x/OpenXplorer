@@ -49,7 +49,7 @@ fn window_with_every_arrow(fixture: &Fixture) -> TestWindow {
     // The file list's folder arrows, which are off by default.
     save_expandable_folders(&test, true);
     test.window.imp().locations.borrow_mut().home = fixture.root().parent().map(Into::into);
-    test.activate("folder-tree", None);
+    test.window.follow_with_folder_tree();
     let reports = file_uri(&reports);
     wait_until("the tree selects the folder shown", || {
         test.window
@@ -114,7 +114,7 @@ fn hidden_navigation_arrows_show_with_focus_in_the_pane() {
         .iter()
         .filter(|widget| widget.has_css_class("side-expander"))
         .count();
-    assert_eq!(chevrons, 2, "This PC and Network");
+    assert_eq!(chevrons, 3, "Quick access, This PC and Network");
     assert!(arrows.len() > chevrons, "the folder tree draws arrows");
     assert!(arrows.iter().all(draws), "shown by default");
 

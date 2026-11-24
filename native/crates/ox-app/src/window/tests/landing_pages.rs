@@ -97,13 +97,12 @@ fn press_shortcut(widget: &impl IsA<gtk::Widget>, accelerator: &str) -> bool {
         })
 }
 
-/// Pinned folders stay in the navigation pane: This PC shows no heading,
-/// no Quick access cards, only its groups; and nothing on it can be
-/// searched or created.
+/// This PC shows the same pinned folders as the sidebar, in a collapsible
+/// group of its own.
 ///
-/// parity: HOME-001
+/// parity: HOME-001, HOME-002
 #[gtk::test]
-fn this_pc_shows_its_groups_with_no_heading_or_quick_access_and_nothing_to_create() {
+fn this_pc_shows_pinned_folders_in_a_collapsible_quick_access_group() {
     let fixture = Fixture::standard();
     let test = TestWindow::open(&fixture.uri());
     test.activate("pin-folder", None);
@@ -119,18 +118,30 @@ fn this_pc_shows_its_groups_with_no_heading_or_quick_access_and_nothing_to_creat
         "no heading: {texts:?}"
     );
     assert!(
-        !texts.iter().any(|text| text == "Example projects"),
-        "no Quick access cards: {texts:?}"
+        texts.iter().any(|text| text == "Example projects"),
+        "Quick access cards: {texts:?}"
     );
     assert!(test
         .window
         .sidebar()
         .labels()
         .contains(&"Example projects".to_owned()));
-    assert_eq!(landing::section_titles(landing), ["Devices and drives"]);
+    assert_eq!(
+        landing::section_titles(landing),
+        ["Devices and drives", "Quick access"]
+    );
+    let header = landing::group_headers(landing).remove(1);
+    let (pins, _) = drive_tile(&test, "Example projects");
+    header.emit_clicked();
+    assert!(!pins.is_visible());
+    test.window.render_places();
+    let (pins, _) = drive_tile(&test, "Example projects");
+    assert!(!pins.is_visible(), "a redraw keeps the group closed");
+    landing::group_headers(landing).remove(1).emit_clicked();
+    assert!(pins.is_visible());
     test.save_share("smb://nas/media", "Media (M:)");
     wait_until("the Network locations group", || {
-        landing::section_titles(landing) == ["Devices and drives", "Network locations"]
+        landing::section_titles(landing) == ["Devices and drives", "Quick access", "Network locations"]
     });
     assert_eq!(test.window.status_bar().texts().0, "Ready");
     assert!(test.window.search_box().is_sensitive(), "Search");
@@ -139,6 +150,11 @@ fn this_pc_shows_its_groups_with_no_heading_or_quick_access_and_nothing_to_creat
         !menu_button_with_class(&test, "new-command").is_sensitive(),
         "New"
     );
+    let (pins, tile) = drive_tile(&test, "Example projects");
+    pins.emit_by_name::<()>("child-activated", &[&tile]);
+    wait_until("the pinned folder opens", || {
+        test.window.current_uri().as_deref() == Some(fixture.uri().as_str())
+    });
 }
 
 #[gtk::test]
@@ -152,14 +168,14 @@ fn google_drive_is_listed_below_the_local_drives() {
     ));
     test.window.render_places();
     let landing = test.window.folder_pane().landing();
-    assert_eq!(
-        landing::section_titles(landing),
-        ["Devices and drives", "Network locations"]
-    );
+    let titles = landing::section_titles(landing);
+    assert_eq!(titles.first().map(String::as_str), Some("Devices and drives"));
+    assert_eq!(titles.last().map(String::as_str), Some("Network locations"));
     let groups = landing::tile_groups(landing);
     assert_eq!(groups[0].1.len(), 3);
-    assert_eq!(groups[1].1.len(), 1);
-    assert_eq!(texts_in(&groups[1].1[0])[0], "Google Drive");
+    let network_tiles = &groups.last().expect("the Network group").1;
+    assert_eq!(network_tiles.len(), 1);
+    assert_eq!(texts_in(&network_tiles[0])[0], "Google Drive");
     let rows = crate::window::sidebar::sidebar_entries(
         &test.window.places(),
         &[],
@@ -286,7 +302,7 @@ fn a_drive_tile_opens_the_drive_and_one_tile_is_selected() {
     let test = this_pc_with_drives(&fixture);
     test.save_share("smb://nas/media", "Media (M:)");
     wait_until("the Network locations group", || {
-        landing::tile_groups(test.window.folder_pane().landing()).len() == 2
+        landing::section_titles(test.window.folder_pane().landing()).contains(&"Network locations".to_owned())
     });
     let (drives, backup) = drive_tile(&test, "Backup");
     let (shares, media) = drive_tile(&test, "Media (\\\\nas) (M:)");
@@ -321,15 +337,21 @@ fn select_all_none_and_invert_act_on_the_tiles_of_both_groups() {
     let test = this_pc_with_drives(&fixture);
     test.save_share("smb://nas/media", "Media (M:)");
     wait_until("the Network locations group", || {
-        landing::tile_groups(test.window.folder_pane().landing()).len() == 2
+        landing::section_titles(test.window.folder_pane().landing()).contains(&"Network locations".to_owned())
     });
     let media = "Media (\\\\nas) (M:)";
-    let every = ["Local Disk", "Backup", "USB", media];
+    let pins = test.window.places().quick_access;
+    let every: Vec<&str> = ["Local Disk", "Backup", "USB"]
+        .into_iter()
+        .chain(pins.iter().map(|place| place.label.as_str()))
+        .chain([media])
+        .collect();
+    let inverted: Vec<&str> = every.iter().copied().filter(|name| *name != "Backup").collect();
     let (drives, backup) = drive_tile(&test, "Backup");
     drives.select_child(&backup);
 
     test.activate("invert-selection", None);
-    assert_eq!(selected_tiles(&test), ["Local Disk", "USB", media]);
+    assert_eq!(selected_tiles(&test), inverted);
     test.activate("select-none", None);
     assert!(selected_tiles(&test).is_empty(), "Select none");
     test.activate("select-all", None);
@@ -367,6 +389,13 @@ fn clear_of_the_resting_pointer(test: &TestWindow) {
 
 /// Right-clicks `tile` and returns the menu it opens in the folder pane.
 fn open_tile_menu(test: &TestWindow, tile: &gtk::FlowBoxChild) -> MenuPopover {
+    if let Some(viewport) = tile
+        .ancestor(gtk::Viewport::static_type())
+        .and_downcast::<gtk::Viewport>()
+    {
+        viewport.scroll_to(tile, None);
+        wait_for_frames(&test.window, 2);
+    }
     let right_click = tile
         .observe_controllers()
         .into_iter()

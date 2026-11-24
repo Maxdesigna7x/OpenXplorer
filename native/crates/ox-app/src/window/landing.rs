@@ -212,6 +212,8 @@ fn capacity_bar(capacity: Capacity) -> gtk::ProgressBar {
 enum Group {
     /// Local Disk, drives, devices and volumes.
     DevicesAndDrives,
+    /// Pinned folders shared with the sidebar.
+    QuickAccess,
     /// The saved network locations.
     NetworkLocations,
 }
@@ -220,6 +222,7 @@ impl Group {
     fn title(self) -> &'static str {
         match self {
             Group::DevicesAndDrives => ox_core::i18n::gettext_static("Devices and drives"),
+            Group::QuickAccess => ox_core::i18n::gettext_static("Quick access"),
             Group::NetworkLocations => ox_core::i18n::gettext_static("Network locations"),
         }
     }
@@ -229,6 +232,7 @@ impl Group {
     fn collapsed_class(self) -> &'static str {
         match self {
             Group::DevicesAndDrives => "drives-collapsed",
+            Group::QuickAccess => "quick-access-collapsed",
             Group::NetworkLocations => "network-collapsed",
         }
     }
@@ -238,11 +242,16 @@ impl Group {
     fn header_class(self) -> &'static str {
         match self {
             Group::DevicesAndDrives => "drives-header",
+            Group::QuickAccess => "quick-access-header",
             Group::NetworkLocations => "network-header",
         }
     }
 
-    const ALL: [Group; 2] = [Group::DevicesAndDrives, Group::NetworkLocations];
+    const ALL: [Group; 3] = [
+        Group::DevicesAndDrives,
+        Group::QuickAccess,
+        Group::NetworkLocations,
+    ];
 }
 
 /// What opening a tile does: an action and its target.
@@ -1142,6 +1151,29 @@ fn this_pc(page: &gtk::Box, places: &Places, locations: &LocationContext, text_s
     let drives = std::iter::once(local_disk()).chain(places.drives.iter().cloned());
     let drive_tiles = drives.map(|row| drive_tile(&row, cell)).collect();
     tile_group(page, Group::DevicesAndDrives, drive_tiles);
+    let pins = places
+        .quick_access
+        .iter()
+        .map(|place| {
+            let entry = super::sidebar::entries::place_entry(place, locations);
+            let icon = ArtImage::new(entry.icon, TILES_ICON);
+            let uri = &place.uri;
+            let key = format!("pin:{uri}");
+            let (child, _) = tile_frame(&icon, &place.label, &key, cell);
+            child.set_tooltip_text(Some(&entry.tooltip));
+            gestures::open_folder_on_middle_click(&child, uri);
+            Tile {
+                child,
+                open: Opening {
+                    action: WindowAction::GoTo,
+                    target: uri.clone(),
+                },
+                menu: PlaceMenu::PinnedFolder { uri: uri.clone() },
+                properties: Some(uri.clone()),
+            }
+        })
+        .collect();
+    tile_group(page, Group::QuickAccess, pins);
     let share_tiles = places
         .saved_shares
         .iter()
