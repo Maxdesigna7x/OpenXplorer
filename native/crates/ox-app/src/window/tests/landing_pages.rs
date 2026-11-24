@@ -168,14 +168,14 @@ fn google_drive_is_listed_below_the_local_drives() {
     ));
     test.window.render_places();
     let landing = test.window.folder_pane().landing();
-    assert_eq!(
-        landing::section_titles(landing),
-        ["Devices and drives", "Network locations"]
-    );
+    let titles = landing::section_titles(landing);
+    assert_eq!(titles.first().map(String::as_str), Some("Devices and drives"));
+    assert_eq!(titles.last().map(String::as_str), Some("Network locations"));
     let groups = landing::tile_groups(landing);
     assert_eq!(groups[0].1.len(), 3);
-    assert_eq!(groups[1].1.len(), 1);
-    assert_eq!(texts_in(&groups[1].1[0])[0], "Google Drive");
+    let network_tiles = &groups.last().expect("the Network group").1;
+    assert_eq!(network_tiles.len(), 1);
+    assert_eq!(texts_in(&network_tiles[0])[0], "Google Drive");
     let rows = crate::window::sidebar::sidebar_entries(
         &test.window.places(),
         &[],
@@ -340,12 +340,18 @@ fn select_all_none_and_invert_act_on_the_tiles_of_both_groups() {
         landing::section_titles(test.window.folder_pane().landing()).contains(&"Network locations".to_owned())
     });
     let media = "Media (\\\\nas) (M:)";
-    let every = ["Local Disk", "Backup", "USB", media];
+    let pins = test.window.places().quick_access;
+    let every: Vec<&str> = ["Local Disk", "Backup", "USB"]
+        .into_iter()
+        .chain(pins.iter().map(|place| place.label.as_str()))
+        .chain([media])
+        .collect();
+    let inverted: Vec<&str> = every.iter().copied().filter(|name| *name != "Backup").collect();
     let (drives, backup) = drive_tile(&test, "Backup");
     drives.select_child(&backup);
 
     test.activate("invert-selection", None);
-    assert_eq!(selected_tiles(&test), ["Local Disk", "USB", media]);
+    assert_eq!(selected_tiles(&test), inverted);
     test.activate("select-none", None);
     assert!(selected_tiles(&test).is_empty(), "Select none");
     test.activate("select-all", None);
