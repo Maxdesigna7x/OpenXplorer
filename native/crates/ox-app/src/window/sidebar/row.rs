@@ -116,7 +116,10 @@ fn row_content(entry: &SidebarEntry, look: RowLook, collapsed: bool, branch: Opt
             .can_focus(false)
             .build();
         draw_named_chevron(&chevron, &entry.label, expanded);
-        content.append(&chevron);
+        let slot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        slot.set_size_request(14, -1);
+        slot.append(&chevron);
+        content.append(&slot);
         let depth = i32::from(entry.level.depth().saturating_sub(1).min(12));
         content.set_margin_start(depth * 16);
     }
