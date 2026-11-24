@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-use gtk::{cairo, gdk, glib};
+use gtk::{gdk, graphene, gsk};
 
 use super::{TabId, TabView};
 use crate::window::BrowserWindow;
@@ -101,8 +101,7 @@ pub(super) fn attach(widget: &gtk::Box, tab: TabView) {
 
 #[expect(
     clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    reason = "widget sizes are exact as f32 in this range and preview dimensions fit i32"
+    reason = "widget sizes are exact as f32 in this range"
 )]
 fn picture(widget: &impl IsA<gtk::Widget>) -> Option<gdk::Texture> {
     if !widget.is_mapped() {
@@ -121,21 +120,12 @@ fn picture(widget: &impl IsA<gtk::Widget>) -> Option<gdk::Texture> {
     let node = snapshot.to_node()?;
     // Tab changes can run while the window renderer is busy. Rasterize the
     // small preview independently, without asking the live GPU for a texture.
-    let width = (width * scale).ceil() as i32;
-    let height = (height * scale).ceil() as i32;
-    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, width, height).ok()?;
-    {
-        let context = cairo::Context::new(&surface).ok()?;
-        node.draw(&context);
-    }
-    let stride = usize::try_from(surface.stride()).ok()?;
-    let bytes = glib::Bytes::from_owned(surface.data().ok()?.to_vec());
-    let format = if cfg!(target_endian = "little") {
-        gdk::MemoryFormat::B8g8r8a8Premultiplied
-    } else {
-        gdk::MemoryFormat::A8r8g8b8Premultiplied
-    };
-    Some(gdk::MemoryTexture::new(width, height, format, &bytes, stride).upcast())
+    let renderer = gsk::CairoRenderer::new();
+    renderer.realize_for_display(&widget.display()).ok()?;
+    let bounds = graphene::Rect::new(0.0, 0.0, (width * scale).ceil(), (height * scale).ceil());
+    let texture = renderer.render_texture(&node, Some(&bounds));
+    renderer.unrealize();
+    Some(texture)
 }
 
 #[cfg(test)]
