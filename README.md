@@ -4,13 +4,13 @@
 
 ## Instalar en Zorin OS
 
-Descarga el [Flatpak de OpenXplorer RANDY](https://github.com/Maxdesigna7x/OpenXplorer/releases/download/v2.0.18-randy.7/OpenXplorer-RANDY-2.0.18.flatpak) para Linux x86-64. Ábrelo en la tienda de software o ejecuta lo siguiente desde la carpeta de descarga.
+Descarga el [Flatpak de OpenXplorer RANDY](https://github.com/Maxdesigna7x/OpenXplorer/releases/download/v2.0.18-randy.8/OpenXplorer-RANDY-2.0.18.flatpak) para Linux x86-64. Ábrelo en la tienda de software o ejecuta lo siguiente desde la carpeta de descarga.
 
 ```sh
 flatpak install --user ./OpenXplorer-RANDY-2.0.18.flatpak
 ```
 
-Abre **OpenXplorer RANDY** desde el menú de aplicaciones. El paquete usa el runtime GNOME 51 de Flathub. En la [publicación de GitHub](https://github.com/Maxdesigna7x/OpenXplorer/releases/tag/v2.0.18-randy.7) también están el código fuente correspondiente y la suma SHA-256.
+Abre **OpenXplorer RANDY** desde el menú de aplicaciones. El paquete usa el runtime GNOME 51 de Flathub. En la [publicación de GitHub](https://github.com/Maxdesigna7x/OpenXplorer/releases/tag/v2.0.18-randy.8) también están el código fuente correspondiente y la suma SHA-256.
 
 Para generar el paquete desde el código, usa `tools/build-randy-flatpak.sh` en un entorno de compilación con Rust, las bibliotecas de [native](native/README.md) y el SDK GNOME 51.
 
@@ -24,7 +24,7 @@ Modificaciones de esta edición al 24 de noviembre de 2026.
 - Uso de las asociaciones del escritorio y del selector del sistema en Flatpak, miniaturas compartidas con GNOME Archivos y acceso al Google Drive de las Cuentas en línea de GNOME desde **Network** y la sección **Network locations** de **This PC**.
 - **Local Disk** muestra la capacidad real del disco raíz. Al abrirlo desde el Flatpak, lleva a tu carpeta personal dentro de OpenXplorer RANDY.
 - Búsqueda en **This PC** con páginas de resultados y miniaturas de archivos compatibles. Usa el índice compatible de FSearch en modo de solo lectura para evitar guardar otra copia en el disco. Si FSearch no tiene un índice compatible, usa las carpetas indexadas en OpenXplorer.
-- Árbol de carpetas que sigue la pestaña activa, sección plegable de **Quick access** en la barra lateral y en **This PC**, y vista previa de las pestañas visitadas al pasar el cursor.
+- Árbol de carpetas integrado bajo cada disco en la barra lateral. En **This PC**, **Quick access** aparece encima de los discos y recuerda si se dejó desplegado. También incluye vista previa de las pestañas visitadas al pasar el cursor.
 - **View → Calculate folder sizes** calcula los tamaños a demanda para ordenar la vista por tamaño.
 - Flatpak separado con identificador `io.winspace.Development.Native`.
 

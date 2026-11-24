@@ -22,6 +22,7 @@
 //! handlers read them through the pane itself. Where a drop on it goes is
 //! [`drop_spots`]'s; collapsing This PC and Network is [`collapsing`]'s.
 
+mod branches;
 mod collapsing;
 mod drop_spots;
 pub(super) mod entries;
@@ -37,9 +38,9 @@ use gtk::{gdk, gio, glib};
 use ox_core::location::same_location;
 
 use super::context_menu::{menu_style_for, MENU_KEY, SHIFT_F10_KEY};
-use super::folder_tree::FolderTree;
 use super::menu_popover::{MenuPopover, MenuStyle};
 use super::window_action::WindowAction;
+use super::BrowserWindow;
 use super::{gestures, preferences};
 
 pub(super) use drop_spots::SidebarDropSpot;
@@ -69,15 +70,16 @@ mod imp {
     use gtk::prelude::*;
     use gtk::subclass::prelude::*;
 
-    use super::{FolderTree, HiddenRow, MenuPopover, Section, SidebarEntry};
+    use super::{branches::Branches, HiddenRow, MenuPopover, Section, SidebarEntry};
 
     /// Private state of [`super::Sidebar`].
     #[derive(Debug, Default)]
     pub(crate) struct Sidebar {
         /// The rows, built by `constructed`.
         pub(super) list: OnceCell<gtk::ListBox>,
-        /// The folder tree below them (SIDE-028).
-        pub(super) folder_tree: OnceCell<FolderTree>,
+        /// The mounted drives and their expanded folders.
+        pub(super) branches: RefCell<Branches>,
+        pub(super) base_rows: RefCell<Vec<(SidebarEntry, HiddenRow)>>,
         /// What each row shows and does, in row order.
         pub(super) entries: RefCell<Vec<SidebarEntry>>,
         /// The rows' context menu, built by `constructed`.
@@ -133,8 +135,7 @@ mod imp {
 }
 
 glib::wrapper! {
-    /// The navigation pane: the scrolling list, and the folder tree below
-    /// it while shown.
+    /// The navigation pane: places and their expanded folders in one list.
     pub(crate) struct Sidebar(ObjectSubclass<imp::Sidebar>)
         @extends gtk::Box, gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
@@ -146,15 +147,7 @@ impl Sidebar {
         self.imp().list.get().expect("constructed builds the list")
     }
 
-    /// The folder tree below the places.
-    pub(super) fn folder_tree(&self) -> &FolderTree {
-        self.imp()
-            .folder_tree
-            .get()
-            .expect("constructed builds the folder tree")
-    }
-
-    /// Builds the list and the folder tree into the pane.
+    /// Builds the single scrolling navigation pane.
     fn build_pane(&self) {
         self.set_orientation(gtk::Orientation::Vertical);
         self.add_css_class("sidebar");
@@ -183,23 +176,10 @@ impl Sidebar {
             .vexpand(true)
             .child(&list)
             .build();
-        // The folder tree, while shown, takes the lower part (SIDE-028).
-        let folder_tree = FolderTree::default();
-        let panes = gtk::Paned::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .start_child(&scroller)
-            .end_child(&folder_tree)
-            .position(420)
-            .resize_start_child(true)
-            .shrink_start_child(false)
-            .shrink_end_child(false)
-            .vexpand(true)
-            .build();
-        self.append(&panes);
-        let imp = self.imp();
-        imp.list.set(list).expect("constructed runs once per object");
-        imp.folder_tree
-            .set(folder_tree)
+        self.append(&scroller);
+        self.imp()
+            .list
+            .set(list)
             .expect("constructed runs once per object");
     }
 
@@ -558,7 +538,7 @@ impl Sidebar {
         list.remove_all();
         let rows: Vec<gtk::ListBoxRow> = entries
             .iter()
-            .map(|entry| row::sidebar_row(entry, self.row_look(), self.is_collapsed(entry.section)))
+            .map(|entry| self.build_sidebar_row(entry))
             .collect();
         // The header function reads the entries as the rows are added.
         self.imp().entries.replace(entries);
@@ -571,9 +551,8 @@ impl Sidebar {
     /// Replaces the rows with `rows`, dimming the hidden ones shown, and
     /// records whether `anything_hidden` (SIDE-010).
     pub(super) fn set_rows(&self, rows: Vec<(SidebarEntry, HiddenRow)>, anything_hidden: bool) {
-        let (entries, hidden): (Vec<SidebarEntry>, Vec<HiddenRow>) = rows.into_iter().unzip();
-        self.set_entries(entries);
-        self.mark_hidden(hidden);
+        self.imp().base_rows.replace(rows);
+        self.rebuild_branches();
         self.imp().anything_hidden.set(anything_hidden);
     }
 
@@ -596,11 +575,19 @@ impl Sidebar {
         let Some(old) = self.list().row_at_index(position) else {
             return false;
         };
+        if let Some((cached, _)) = imp
+            .base_rows
+            .borrow_mut()
+            .iter_mut()
+            .find(|(base, _)| base.target == entry.target && base.section == entry.section)
+        {
+            *cached = entry.clone();
+        }
         imp.entries.borrow_mut()[index] = entry;
         let row = {
             let entries = imp.entries.borrow();
             let entry = &entries[index];
-            row::sidebar_row(entry, self.row_look(), self.is_collapsed(entry.section))
+            self.build_sidebar_row(entry)
         };
         let hidden = imp.hidden_rows.borrow().get(index).copied().unwrap_or_default();
         if hidden != HiddenRow::Shown {
@@ -667,7 +654,10 @@ impl Sidebar {
     /// collapsed, its head is highlighted instead, as Explorer highlights
     /// the collapsed parent (SIDE-033).
     pub(super) fn select(&self, uri: &str) {
-        self.imp().location.replace(Some(uri.to_owned()));
+        let previous = self.imp().location.replace(Some(uri.to_owned()));
+        if previous.as_deref() != Some(uri) {
+            self.follow_drive_path(uri);
+        }
         self.highlight_location();
     }
 

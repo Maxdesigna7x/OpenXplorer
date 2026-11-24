@@ -280,7 +280,21 @@ impl BrowserWindow {
         }
         super::home_page::leave(body);
         let locations = self.imp().locations.borrow();
-        landing::render(body, page, places, &locations, self.skin().drawn_text_size());
+        let quick_access_expanded = self
+            .context()
+            .settings_data()
+            .preferences
+            .home_folded
+            .iter()
+            .any(|key| key == landing::QUICK_ACCESS_EXPANDED);
+        landing::render(
+            body,
+            page,
+            places,
+            &locations,
+            self.skin().drawn_text_size(),
+            quick_access_expanded,
+        );
     }
 }
 

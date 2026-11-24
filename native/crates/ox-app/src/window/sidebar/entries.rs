@@ -92,6 +92,18 @@ pub(in crate::window) enum RowLevel {
     Group,
     /// A row inside a group, indented.
     Child,
+    /// A folder nested below a drive, one level or deeper.
+    Descendant(u16),
+}
+
+impl RowLevel {
+    pub(super) fn depth(self) -> u16 {
+        match self {
+            Self::Place | Self::Group => 0,
+            Self::Child => 1,
+            Self::Descendant(depth) => depth,
+        }
+    }
 }
 
 /// What activating a row does.

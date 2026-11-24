@@ -65,7 +65,7 @@ impl Sidebar {
                 match entry.level {
                     RowLevel::Place => {}
                     RowLevel::Group => row::show_expanded(&row, section, !collapsed),
-                    RowLevel::Child => row.set_visible(!collapsed),
+                    RowLevel::Child | RowLevel::Descendant(_) => row.set_visible(!collapsed),
                 }
             }
         }
@@ -164,13 +164,18 @@ impl Sidebar {
                 // its minus collapses it, as Num Lock with them does in
                 // Windows' navigation pane; on any row they stay here
                 // rather than typing into the file list (CMD-039).
+                if key == gdk::Key::KP_Multiply && sidebar.open_all_below_focused() {
+                    return glib::Propagation::Stop;
+                }
                 let keypad = match key {
                     gdk::Key::KP_Add | gdk::Key::KP_Multiply => Some(true),
                     gdk::Key::KP_Subtract => Some(false),
                     _ => None,
                 };
                 if let Some(expand) = keypad {
-                    sidebar.expand_focused_section(expand);
+                    if !sidebar.set_focused_branch(expand) {
+                        sidebar.expand_focused_section(expand);
+                    }
                     return glib::Propagation::Stop;
                 }
                 let expand = match key {
@@ -178,7 +183,10 @@ impl Sidebar {
                     gdk::Key::Left | gdk::Key::KP_Left => false,
                     _ => return glib::Propagation::Proceed,
                 };
-                if sidebar.expand_focused_section(expand) || sidebar.step_through_tree(expand) {
+                if sidebar.set_focused_branch(expand)
+                    || sidebar.expand_focused_section(expand)
+                    || sidebar.step_through_tree(expand)
+                {
                     glib::Propagation::Stop
                 } else {
                     glib::Propagation::Proceed
@@ -200,6 +208,7 @@ impl Sidebar {
         if let Some(section) = head.filter(|section| self.is_collapsed(*section)) {
             self.collapse_section(section, false);
         }
+        self.follow_selected_drive();
         match self.list().selected_row() {
             Some(row) => row.grab_focus(),
             None => false,
@@ -236,15 +245,18 @@ impl Sidebar {
             let Some(entry) = entries.get(index) else {
                 return false;
             };
-            match (into, entry.level) {
-                (true, RowLevel::Group) if !self.is_collapsed(entry.section) => entries
+            let depth = entry.level.depth();
+            if into && !self.is_collapsed(entry.section) {
+                entries
                     .get(index + 1)
-                    .filter(|next| next.section == entry.section && next.level == RowLevel::Child)
-                    .map(|_| index + 1),
-                (false, RowLevel::Child) => entries[..index]
+                    .filter(|next| next.section == entry.section && next.level.depth() == depth + 1)
+                    .map(|_| index + 1)
+            } else if !into && depth > 0 {
+                entries[..index]
                     .iter()
-                    .rposition(|head| head.level == RowLevel::Group && head.section == entry.section),
-                _ => None,
+                    .rposition(|parent| parent.section == entry.section && parent.level.depth() == depth - 1)
+            } else {
+                None
             }
         };
         let row = target
@@ -286,7 +298,7 @@ fn shown_row(entries: &[SidebarEntry], collapsed: &[Section], index: usize) -> u
     let Some(entry) = entries.get(index) else {
         return index;
     };
-    if entry.level != RowLevel::Child || !collapsed.contains(&entry.section) {
+    if entry.level.depth() == 0 || !collapsed.contains(&entry.section) {
         return index;
     }
     entries

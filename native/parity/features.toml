@@ -1054,7 +1054,7 @@ native_note = "native/crates/ox-app/src/window/address_bar/suggestions.rs: every
 id = "HOME-001"
 area = "HOME"
 title = "This PC page layout"
-behaviour = "The pseudo-location 'pc:' (sidebar This PC) is laid out as Windows 11 lays it out (owner decision 2026-11-06: This PC uses grouped tiles): an item view of tiles under collapsible group headers, 'Devices and drives (N)', 'Quick access (N)' and 'Network locations (N)', each a chevron, the title and count and a line to the right edge, with no page heading or subtitle; a group with nothing in it is left out. Clicking a header collapses or expands its group; with the keyboard, Up from a group's first row reaches its header, Left collapses it, Right expands it and Down returns to its tiles; an expanded group's header is no Tab stop, a collapsed group's header is one. A collapsed group, the selected tile and the keyboard's place survive the page being drawn again. The status bar reads 'Ready'. Search opens indexed local disk results. Up and New are disabled. The app's own Home page is unchanged."
+behaviour = "The pseudo-location 'pc:' (sidebar This PC) is laid out as Windows 11 lays it out (owner decision 2026-11-06: This PC uses grouped tiles): an item view of tiles under collapsible group headers, 'Quick access (N)', 'Devices and drives (N)' and 'Network locations (N)', each a chevron, the title and count and a line to the right edge, with no page heading or subtitle; a group with nothing in it is left out. Clicking a header collapses or expands its group; with the keyboard, Up from a group's first row reaches its header, Left collapses it, Right expands it and Down returns to its tiles; an expanded group's header is no Tab stop, a collapsed group's header is one. A collapsed group, the selected tile and the keyboard's place survive the page being drawn again. The status bar reads 'Ready'. Search opens indexed local disk results. Up and New are disabled. The app's own Home page is unchanged."
 origin = ["openxplorer"]
 priority = "must"
 openxplorer = "has"
@@ -1075,7 +1075,7 @@ native_note = "native/crates/ox-app/src/window/landing.rs; tested in native/crat
 id = "HOME-002"
 area = "HOME"
 title = "Quick access cards on This PC"
-behaviour = "The same pinned folders as the sidebar appear in a collapsible Quick access group. Double-click or Enter navigates. Middle-click opens in a background tab."
+behaviour = "The same pinned folders as the sidebar appear in a collapsible Quick access group above the drives. Its expanded state is saved, with collapsed as the default. Double-click or Enter navigates. Middle-click opens in a background tab."
 origin = ["openxplorer"]
 priority = "must"
 openxplorer = "has"
@@ -1083,7 +1083,7 @@ sources = ["v2.0.0:desktop/ui/app.js:428"]
 python_tests = []
 bridge = []
 native = "done"
-native_note = "This PC shares the sidebar's pinned folders in a collapsible Quick access group. Double-click or Enter opens the folder, and middle-click opens it in a background tab. Test: native/crates/ox-app/src/window/tests/landing_pages.rs (this_pc_shows_pinned_folders_in_a_collapsible_quick_access_group)."
+native_note = "This PC shares the sidebar's pinned folders in a collapsible Quick access group above the drives. Its expanded state is saved, with collapsed as the default. Double-click or Enter opens the folder, and middle-click opens it in a background tab. Test: native/crates/ox-app/src/window/tests/landing_pages.rs (this_pc_shows_pinned_folders_in_a_collapsible_quick_access_group)."
 
 [[feature]]
 id = "HOME-003"
@@ -5962,7 +5962,7 @@ python_tests = []
 bridge = ["list"]
 dolphin = "show_folders_panel: F7"
 native = "done"
-native_note = "View > Folder tree and F7 (Dolphin's key) show a tree of folders in the navigation pane below the places, split from them by a draggable divider; the choice and the tree's options are saved for every window (folderTree). It is on by default and roots itself at the current mount when available, at Home for the home folder and its descendants, or at the top of the file system or server. It follows the active tab, expanding the path and the current row, selecting it and scrolling to it (Scroll to the folder shown). A folder's subfolders are read only when its row is expanded, through an asynchronous GtkDirectoryList. Refresh rebuilds the tree from the current directory. Click opens a folder, Ctrl+click or middle-click opens it in a tab (Shift: in front), Enter opens the focused one, Right and Left open and close a folder or move to its first subfolder or its parent, and the chevron opens and closes it. The context menu has Open in new tab, Open in new window, Cut, Copy, Paste (into the folder), Rename…, Delete (to the Recycle Bin, as Windows Explorer names it), Delete permanently, Open in Terminal, Properties and the three options with check marks (Show hidden folders off by default); the file commands act on the folder clicked with the usual confirmations and Undo (renaming the folder shown, or one it is in, moves the tab with it); Cut, Rename…, Delete and Delete permanently are off for the tree's top, and every file command but Paste is off for share roots and virtual places. Explorer's Ctrl+Shift+E (expand to the current folder) is what the tree always does. Test: window/tests/folder_tree.rs."
+native_note = "View > Folder tree and F7 toggle mounted drive branches inside the single navigation list. Each drive opens on demand and the active folder expands its ancestors beneath the matching drive. Left and Right, keypad commands, middle-click and Ctrl+click are handled by the sidebar. Test: window/tests/folder_tree.rs (drive_folders_expand_in_the_same_sidebar_list)."
 
 [[feature]]
 id = "SIDE-029"

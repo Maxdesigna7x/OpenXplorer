@@ -127,9 +127,12 @@ fn left_and_right_on_a_section_head_collapse_and_expand_it() {
     assert_eq!(focused(), Some(row_named(&test, "Local Disk")));
     assert!(!sidebar.section_is_collapsed("thisPc"));
 
+    if section_chevron(&test, "Local Disk").tooltip_text().as_deref() == Some("Collapse Local Disk") {
+        assert!(press(&test, gdk::Key::Left), "Left closes the open drive first");
+    }
     assert!(
         press(&test, gdk::Key::Left),
-        "Left on a drive steps out to its head"
+        "Left on a closed drive steps out to its head"
     );
     assert_eq!(focused(), Some(row_named(&test, "This PC")));
     assert!(
@@ -151,16 +154,19 @@ fn left_and_right_on_a_section_head_collapse_and_expand_it() {
 fn a_collapsed_section_highlights_its_head_for_the_place_inside() {
     let test = TestWindow::open("file:///");
     let local_disk = row_named(&test, "Local Disk");
-    let this_pc = row_named(&test, "This PC");
     assert!(local_disk.is_selected(), "the open drive is highlighted");
 
     section_chevron(&test, "This PC").emit_clicked();
-    wait_until("This PC to be highlighted", || this_pc.is_selected());
-    assert!(!local_disk.is_visible());
+    wait_until("This PC to be highlighted", || {
+        row_named(&test, "This PC").is_selected()
+    });
+    assert!(!row_named(&test, "Local Disk").is_visible());
 
     section_chevron(&test, "This PC").emit_clicked();
-    wait_until("Local Disk to be highlighted again", || local_disk.is_selected());
-    assert!(!this_pc.is_selected());
+    wait_until("Local Disk to be highlighted again", || {
+        row_named(&test, "Local Disk").is_selected()
+    });
+    assert!(!row_named(&test, "This PC").is_selected());
 }
 
 /// A click on a chevron belongs to the chevron: the list's Ctrl+click and

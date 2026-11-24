@@ -60,7 +60,10 @@ fn drive_tile(test: &TestWindow, name: &str) -> (gtk::FlowBox, gtk::FlowBoxChild
 /// The first group header This PC shows.
 fn first_header(test: &TestWindow) -> gtk::Button {
     let headers = landing::group_headers(test.window.folder_pane().landing());
-    headers.into_iter().next().expect("This PC heads its groups")
+    headers
+        .into_iter()
+        .find(|header| header.has_css_class("drives-header"))
+        .expect("This PC heads its drives")
 }
 
 /// Emits `key-pressed` with `key` on the key controller of `widget`;
@@ -128,20 +131,40 @@ fn this_pc_shows_pinned_folders_in_a_collapsible_quick_access_group() {
         .contains(&"Example projects".to_owned()));
     assert_eq!(
         landing::section_titles(landing),
-        ["Devices and drives", "Quick access"]
+        ["Quick access", "Devices and drives"]
     );
-    let header = landing::group_headers(landing).remove(1);
+    let header = landing::group_headers(landing).remove(0);
     let (pins, _) = drive_tile(&test, "Example projects");
+    assert!(!pins.is_visible(), "Quick access is collapsed by default");
     header.emit_clicked();
-    assert!(!pins.is_visible());
-    test.window.render_places();
-    let (pins, _) = drive_tile(&test, "Example projects");
-    assert!(!pins.is_visible(), "a redraw keeps the group closed");
-    landing::group_headers(landing).remove(1).emit_clicked();
     assert!(pins.is_visible());
+    wait_until("the expanded state is saved", || {
+        ox_core::settings::Settings::open(test.settings_directory())
+            .snapshot()
+            .preferences
+            .home_folded
+            .iter()
+            .any(|key| key == landing::QUICK_ACCESS_EXPANDED)
+    });
+    let reopened = test.open_beside(Page::ThisPc.uri());
+    let (pins, _) = drive_tile(&reopened, "Example projects");
+    assert!(pins.is_visible());
+    landing::group_headers(reopened.window.folder_pane().landing())
+        .remove(0)
+        .emit_clicked();
+    wait_until("the collapsed state is saved", || {
+        !ox_core::settings::Settings::open(test.settings_directory())
+            .snapshot()
+            .preferences
+            .home_folded
+            .iter()
+            .any(|key| key == landing::QUICK_ACCESS_EXPANDED)
+    });
+    let reopened = reopened.open_beside(Page::ThisPc.uri());
+    assert!(!drive_tile(&reopened, "Example projects").0.is_visible());
     test.save_share("smb://nas/media", "Media (M:)");
     wait_until("the Network locations group", || {
-        landing::section_titles(landing) == ["Devices and drives", "Quick access", "Network locations"]
+        landing::section_titles(landing) == ["Quick access", "Devices and drives", "Network locations"]
     });
     assert_eq!(test.window.status_bar().texts().0, "Ready");
     assert!(test.window.search_box().is_sensitive(), "Search");
@@ -169,10 +192,10 @@ fn google_drive_is_listed_below_the_local_drives() {
     test.window.render_places();
     let landing = test.window.folder_pane().landing();
     let titles = landing::section_titles(landing);
-    assert_eq!(titles.first().map(String::as_str), Some("Devices and drives"));
+    assert!(titles.iter().any(|title| title == "Devices and drives"));
     assert_eq!(titles.last().map(String::as_str), Some("Network locations"));
     let groups = landing::tile_groups(landing);
-    assert_eq!(groups[0].1.len(), 3);
+    assert_eq!(drive_tile(&test, "Local Disk").0.observe_children().n_items(), 3);
     let network_tiles = &groups.last().expect("the Network group").1;
     assert_eq!(network_tiles.len(), 1);
     assert_eq!(texts_in(&network_tiles[0])[0], "Google Drive");
@@ -193,11 +216,8 @@ fn google_drive_is_listed_below_the_local_drives() {
 fn drive_tiles_are_laid_out_as_the_tiles_view() {
     let fixture = Fixture::standard();
     let test = this_pc_with_drives(&fixture);
-    let landing = test.window.folder_pane().landing();
-    let (_, tiles) = landing::tile_groups(landing)
-        .into_iter()
-        .next()
-        .expect("the drives' group");
+    let (drives, _) = drive_tile(&test, "Local Disk");
+    let tiles = descendants::<gtk::FlowBoxChild>(&drives);
     let places: Vec<Bounds> = tiles.iter().map(|tile| bounds(&test, tile)).collect();
 
     assert_eq!(places.len(), 3, "Local Disk, Backup and USB");
@@ -236,12 +256,14 @@ fn the_keyboard_collapses_and_expands_a_group_from_its_header() {
         "a collapsed group's header stays a Tab stop"
     );
     test.window.folder_pane().focus_view();
-    assert!(header.has_focus(), "the keyboard comes back to the page");
+    let first_group = landing::group_headers(test.window.folder_pane().landing()).remove(0);
+    assert!(
+        first_group.has_focus(),
+        "the keyboard comes back to the first collapsed group"
+    );
+    header.grab_focus();
     test.window.render_places();
-    let (flow, _) = landing::tile_groups(test.window.folder_pane().landing())
-        .into_iter()
-        .next()
-        .expect("the drives' group");
+    let (flow, _) = drive_tile(&test, "Local Disk");
     assert!(!flow.is_visible(), "a redraw keeps the group collapsed");
     let header = first_header(&test);
     assert!(header.has_focus(), "and the keyboard on its header");
@@ -341,9 +363,10 @@ fn select_all_none_and_invert_act_on_the_tiles_of_both_groups() {
     });
     let media = "Media (\\\\nas) (M:)";
     let pins = test.window.places().quick_access;
-    let every: Vec<&str> = ["Local Disk", "Backup", "USB"]
-        .into_iter()
-        .chain(pins.iter().map(|place| place.label.as_str()))
+    let every: Vec<&str> = pins
+        .iter()
+        .map(|place| place.label.as_str())
+        .chain(["Local Disk", "Backup", "USB"])
         .chain([media])
         .collect();
     let inverted: Vec<&str> = every.iter().copied().filter(|name| *name != "Backup").collect();
@@ -800,20 +823,21 @@ fn a_group_heading_menu_acts_on_its_own_pane_only() {
     test.window.render_places();
     let first = test.window.active_side();
     let second = first.other();
-    let groups_shown = |side| {
-        landing::tile_groups(test.window.pane_on(side).landing())
-            .iter()
-            .map(|(flow, _)| flow.is_visible())
-            .collect::<Vec<bool>>()
+    let drives_shown = |side| {
+        landing::group_headers(test.window.pane_on(side).landing())
+            .into_iter()
+            .find(|header| header.has_css_class("drives-header"))
+            .and_then(|header| header.next_sibling())
+            .map(|flow| flow.is_visible())
     };
     wait_until("This PC in both panes", || {
-        groups_shown(second).first() == Some(&true) && groups_shown(first).first() == Some(&true)
+        drives_shown(second) == Some(true) && drives_shown(first) == Some(true)
     });
     wait_for_frames(&test.window, 2);
     let pressed = landing::group_headers(test.window.pane_on(second).landing())
         .into_iter()
-        .next()
-        .expect("This PC heads its groups");
+        .find(|header| header.has_css_class("drives-header"))
+        .expect("This PC heads its drives");
 
     // The press makes its pane active first, which draws This PC again.
     test.window.activate_pane(second);
@@ -830,12 +854,10 @@ fn a_group_heading_menu_acts_on_its_own_pane_only() {
         .expect("the heading's menu is open in its pane");
     wait_for_frames(&test.window, 2);
     menu.click_row("Collapse group");
-    wait_until("the group to collapse", || {
-        groups_shown(second).first() == Some(&false)
-    });
+    wait_until("the group to collapse", || drives_shown(second) == Some(false));
     close_menu(&menu);
 
-    assert_eq!(groups_shown(first).first(), Some(&true));
+    assert_eq!(drives_shown(first), Some(true));
 }
 
 /// The right-click menus of a file, a folder, several items and a drive,

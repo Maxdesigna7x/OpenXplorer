@@ -68,6 +68,11 @@ fn pinned_rows_line_up_with_home_on_the_32_pixel_pitch() {
     test.window.imp().volumes.replace(Vec::new());
     test.window.render_places();
     wait_for_frames(&test.window, 2);
+    let disk = super::sidebar::section_chevron(&test, "Local Disk");
+    if disk.tooltip_text().as_deref() == Some("Collapse Local Disk") {
+        disk.emit_clicked();
+        wait_for_frames(&test.window, 2);
+    }
     let home = bounds(&test, &row_named(&test, "Home"));
     assert_eq!(
         home,

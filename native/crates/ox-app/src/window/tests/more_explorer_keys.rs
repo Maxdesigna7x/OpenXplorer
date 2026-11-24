@@ -16,7 +16,7 @@ use gtk::glib::translate::IntoGlib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib};
-use ox_core::location::{file_uri, same_location};
+use ox_core::location::file_uri;
 
 use super::file_ops_support::{press_shortcut, press_shortcut_where_focused, select_names};
 use super::sidebar::row_named;
@@ -50,32 +50,19 @@ fn locks_on() -> gdk::ModifierType {
     gdk::ModifierType::LOCK_MASK | gdk::ModifierType::from_bits_truncate(1 << 4)
 }
 
-/// The folder tree's list of rows.
-fn tree_view(test: &TestWindow) -> gtk::ListView {
-    crate::test_support::harness::descendants::<gtk::ListView>(test.window.folder_tree())
-        .into_iter()
-        .next()
-        .expect("the tree has its list")
-}
-
-/// A window on `Example projects/Documents/Reports`, whose folders below
-/// the fixture are `Documents/Reports/2026` and `Documents/Archive`, with
-/// the folder tree shown and following it.
+/// Opens the current location inside a mounted drive in the sidebar.
 fn window_with_tree(fixture: &Fixture) -> (TestWindow, String) {
     let reports = fixture.path("Documents").join("Reports");
     fs::create_dir_all(reports.join("2026")).expect("fixture subfolders");
     fs::create_dir(fixture.path("Documents").join("Archive")).expect("fixture subfolder");
-    let test = TestWindow::open(&file_uri(&reports));
-    // The fixture's temporary folder plays the home folder, so the tree
-    // starts there and never lists the real disk.
-    test.window.imp().locations.borrow_mut().home = fixture.root().parent().map(Into::into);
-    test.window.follow_with_folder_tree();
+    let test = super::folder_tree::open_with_drive(fixture);
     let reports = file_uri(&reports);
-    let tree = test.window.folder_tree();
+    test.window.navigate(&reports).expect("the fixture folder");
     wait_until("the tree selects the folder shown", || {
-        tree.selected_uri()
-            .is_some_and(|uri| same_location(&uri, &reports))
+        super::sidebar::row_named(&test, "Fixture drive").is_visible()
+            && test.window.sidebar().labels().contains(&"2026".to_owned())
     });
+    super::sidebar::row_named(&test, "Reports").grab_focus();
     (test, reports)
 }
 
@@ -180,11 +167,14 @@ fn ctrl_insert_copies_and_shift_insert_pastes() {
 fn ctrl_shift_e_opens_the_navigation_pane_down_to_the_folder_shown() {
     let fixture = Fixture::standard();
     let (test, reports) = window_with_tree(&fixture);
-    let tree = test.window.folder_tree();
+    let tree = test.window.sidebar();
     wait_until("the current folder to expand automatically", || {
-        tree.outline().iter().any(|line| line.trim() == "2026")
+        tree.labels().iter().any(|line| line.trim() == "2026")
     });
-    assert!(press_on(&tree_view(&test), gdk::Key::KP_Subtract));
+    assert!(press_on(
+        &test.window.sidebar().list().clone(),
+        gdk::Key::KP_Subtract
+    ));
     test.window.folder_pane().focus_view();
 
     assert!(press_shortcut_where_focused(
@@ -194,11 +184,10 @@ fn ctrl_shift_e_opens_the_navigation_pane_down_to_the_folder_shown() {
     ));
 
     wait_until("the folder shown to show its subfolders", || {
-        tree.outline().iter().any(|line| line.trim() == "2026")
+        tree.labels().iter().any(|line| line.trim() == "2026")
     });
-    assert!(tree
-        .selected_uri()
-        .is_some_and(|uri| same_location(&uri, &reports)));
+    assert!(super::sidebar::row_named(&test, "Reports").is_selected());
+    assert_eq!(test.window.current_uri().as_deref(), Some(reports.as_str()));
     let focus = GtkWindowExt::focus(&test.window).expect("something has focus");
     assert!(focus.is_ancestor(tree), "keyboard focus is on the tree");
 
@@ -261,9 +250,9 @@ fn ctrl_shift_e_without_the_tree_focuses_the_places_row() {
 fn the_keypad_keys_open_and_close_folders_in_the_folder_tree() {
     let fixture = Fixture::standard();
     let (test, _) = window_with_tree(&fixture);
-    let tree = test.window.folder_tree();
-    let view = tree_view(&test);
-    let shows = |name: &str| tree.outline().iter().any(|line| line.trim() == name);
+    let tree = test.window.sidebar();
+    let view = test.window.sidebar().list().clone();
+    let shows = |name: &str| tree.labels().iter().any(|line| line.trim() == name);
     wait_until("Reports opens by default", || shows("2026"));
     assert!(press_on(&view, gdk::Key::KP_Subtract));
     assert!(shows("Reports") && !shows("2026"));
@@ -275,17 +264,20 @@ fn the_keypad_keys_open_and_close_folders_in_the_folder_tree() {
 
     // Documents, opened from the tree, closed, then the asterisk opens
     // every folder below it.
-    let documents = tree
-        .outline()
+    let labels = tree.labels();
+    let reports = labels.iter().position(|line| line == "Reports").expect("Reports");
+    let documents = labels[..reports]
         .iter()
-        .position(|line| line.trim() == "Documents")
+        .rposition(|line| line == "Documents")
         .expect("Documents is listed");
-    tree.activate_row(u32::try_from(documents).expect("a short tree"));
+    let index = i32::try_from(documents).expect("a short tree");
+    let row = tree.list().row_at_index(index).expect("Documents");
+    row.activate();
     let documents = fixture.uri_of("Documents");
     wait_until("the tree to select Documents", || {
-        tree.selected_uri()
-            .is_some_and(|uri| same_location(&uri, &documents))
+        test.window.current_uri().as_deref() == Some(documents.as_str())
     });
+    tree.list().row_at_index(index).expect("Documents").grab_focus();
     assert!(press_on(&view, gdk::Key::KP_Subtract));
     assert!(!shows("Reports"), "Documents is closed");
     assert!(press_on(&view, gdk::Key::KP_Multiply), "asterisk opens all");
@@ -358,9 +350,9 @@ fn ctrl_shift_and_a_digit_key_switch_the_view_as_a_keyboard_sends_them() {
 fn the_folder_tree_keys_work_with_num_lock_on() {
     let fixture = Fixture::standard();
     let (test, _) = window_with_tree(&fixture);
-    let tree = test.window.folder_tree();
-    let view = tree_view(&test);
-    let shows = |name: &str| tree.outline().iter().any(|line| line.trim() == name);
+    let tree = test.window.sidebar();
+    let view = test.window.sidebar().list().clone();
+    let shows = |name: &str| tree.labels().iter().any(|line| line.trim() == name);
     wait_until("Reports opens by default", || shows("2026"));
     assert!(press_on(&view, gdk::Key::KP_Subtract));
     assert!(shows("Reports") && !shows("2026"));

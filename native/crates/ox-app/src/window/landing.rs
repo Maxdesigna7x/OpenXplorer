@@ -207,6 +207,9 @@ fn capacity_bar(capacity: Capacity) -> gtk::ProgressBar {
     bar
 }
 
+/// Stored as an affirmative exception so an existing profile starts folded.
+pub(super) const QUICK_ACCESS_EXPANDED: &str = "thisPcQuickAccessExpanded";
+
 /// The groups of This PC, in Windows 11's order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Group {
@@ -537,6 +540,15 @@ fn group_header(page: &gtk::Box, group: Group, count: usize, tiles: &gtk::FlowBo
                 header.set_focusable(false);
             }
             header.update_state(&[gtk::accessible::State::Expanded(Some(!collapse))]);
+            if group == Group::QuickAccess {
+                if let Some(window) = page.root().and_downcast::<BrowserWindow>() {
+                    window.context().remember_change(Box::new(move |settings| {
+                        settings
+                            .set_home_folded(QUICK_ACCESS_EXPANDED, !collapse)
+                            .map(|_| ())
+                    }));
+                }
+            }
         }
     ));
     connect_header_keys(&header, tiles);
@@ -1148,9 +1160,6 @@ impl Kept {
 
 fn this_pc(page: &gtk::Box, places: &Places, locations: &LocationContext, text_size: TextSize) {
     let cell = tiles_cell(text_size);
-    let drives = std::iter::once(local_disk()).chain(places.drives.iter().cloned());
-    let drive_tiles = drives.map(|row| drive_tile(&row, cell)).collect();
-    tile_group(page, Group::DevicesAndDrives, drive_tiles);
     let pins = places
         .quick_access
         .iter()
@@ -1174,6 +1183,10 @@ fn this_pc(page: &gtk::Box, places: &Places, locations: &LocationContext, text_s
         })
         .collect();
     tile_group(page, Group::QuickAccess, pins);
+    let drives = std::iter::once(local_disk()).chain(places.drives.iter().cloned());
+    let drive_tiles = drives.map(|row| drive_tile(&row, cell)).collect();
+    tile_group(page, Group::DevicesAndDrives, drive_tiles);
+
     let share_tiles = places
         .saved_shares
         .iter()
@@ -1190,6 +1203,7 @@ pub(super) fn render(
     places: &Places,
     locations: &LocationContext,
     text_size: TextSize,
+    quick_access_expanded: bool,
 ) {
     // A redraw keeps the selected tile and the keyboard's place.
     let kept = Kept::read(body);
@@ -1198,6 +1212,12 @@ pub(super) fn render(
         Page::ThisPc => {
             body.add_css_class(THIS_PC_CLASS);
             allow_drive_drags(body);
+            if !body.has_css_class("quick-access-initialized") {
+                body.add_css_class("quick-access-initialized");
+                if !quick_access_expanded {
+                    body.add_css_class(Group::QuickAccess.collapsed_class());
+                }
+            }
             this_pc(body, places, locations, text_size);
             select_one_group(body);
             kept.restore(body);
