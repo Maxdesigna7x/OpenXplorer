@@ -285,6 +285,14 @@ msgstr ""
 msgid "New tab (Ctrl+T)"
 msgstr ""
 
+#: crates/ox-app/resources/ui/window.ui
+msgid "Next results"
+msgstr ""
+
+#: crates/ox-app/resources/ui/window.ui
+msgid "Previous results"
+msgstr ""
+
 #: crates/ox-app/src/app_context/default_open.rs crates/ox-app/src/integration/applications.rs
 msgid "That application is no longer installed."
 msgstr ""
@@ -353,7 +361,7 @@ msgstr ""
 msgid "Extract all…"
 msgstr ""
 
-#: crates/ox-app/src/archive_view/browser.rs crates/ox-app/src/window/command_bar/menus.rs crates/ox-app/src/window/conflict_window.rs crates/ox-core/src/search/facets.rs
+#: crates/ox-app/src/archive_view/browser.rs crates/ox-app/src/window/command_bar/menus.rs crates/ox-app/src/window/conflict_window.rs crates/ox-core/src/search/facets.rs crates/ox-core/src/search/fsearch.rs
 msgid "Folder"
 msgstr ""
 
@@ -2712,6 +2720,10 @@ msgid "No items found in this folder or its subfolders."
 msgstr ""
 
 #: crates/ox-app/src/search/report.rs
+msgid "No matches on the indexed local disks. Check which disks are indexed in Search settings."
+msgstr ""
+
+#: crates/ox-app/src/search/report.rs
 msgid "Only this folder is being filtered. Enable its search cache to include subfolders."
 msgstr ""
 
@@ -2746,6 +2758,10 @@ msgstr ""
 
 #: crates/ox-app/src/search/source.rs
 msgid "Current folder only"
+msgstr ""
+
+#: crates/ox-app/src/search/source.rs
+msgid "Indexed local disks"
 msgstr ""
 
 #: crates/ox-app/src/search/source.rs
@@ -3986,7 +4002,7 @@ msgstr ""
 msgid "Folder to cache"
 msgstr ""
 
-#: crates/ox-app/src/settings_page/indexed_folders.rs crates/ox-app/src/settings_page/indexing.rs
+#: crates/ox-app/resources/ui/window.ui crates/ox-app/src/settings_page/indexed_folders.rs crates/ox-app/src/settings_page/indexing.rs
 msgid "Indexed folders"
 msgstr ""
 
@@ -6338,6 +6354,11 @@ msgstr ""
 
 #: crates/ox-app/src/window/folder_pane/parts.rs
 msgid "This folder is empty."
+msgstr ""
+
+#. Keep each {name} as it is: the app puts a value there.
+#: crates/ox-app/src/window/folder_search.rs
+msgid "Indexed local disks · Page {page}"
 msgstr ""
 
 #: crates/ox-app/src/window/folder_size_scan.rs
@@ -9526,6 +9547,10 @@ msgstr ""
 
 #: crates/ox-core/src/search/error.rs
 msgid "Directory exceeds the one-million-entry safety limit."
+msgstr ""
+
+#: crates/ox-core/src/search/error.rs
+msgid "Indexing paused because the drive storing the search index is low on space. Free space and refresh the index."
 msgstr ""
 
 #: crates/ox-core/src/search/error.rs

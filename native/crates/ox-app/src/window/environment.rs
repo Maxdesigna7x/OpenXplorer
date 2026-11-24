@@ -140,6 +140,9 @@ impl BrowserWindow {
         self.render_location();
         self.context().reload_settings();
         self.context().refresh_stable_mounts();
+        if self.current_uri().as_deref() == Some(ox_core::location::PC_URI) {
+            self.run_search_again();
+        }
     }
 
     /// The sidebar and landing sections for the current settings, volumes

@@ -35,6 +35,8 @@ finish-args:
   # Read the host’s per-file custom icons and folder pictures through GIO.
   - --filesystem=xdg-data/gvfs-metadata:ro
   - --filesystem=xdg-cache/thumbnails
+  # This PC can reuse the host search snapshot without writing a second index.
+  - --filesystem=xdg-data/fsearch:ro
   # SMB passwords the user asks to remember are kept in the desktop's Secret
   # Service under the Python app's schema io.winspace.SmbCredentials, so both
   # apps find each other's saved sign-ins.

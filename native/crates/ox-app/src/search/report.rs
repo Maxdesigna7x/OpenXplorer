@@ -57,6 +57,9 @@ impl SearchReport {
     /// The strip's note: that results were cut off, or how fresh cached
     /// ones are; `None` for a complete live search.
     pub(crate) fn freshness_note(&self) -> Option<&'static str> {
+        if self.source == SearchSource::LocalDisks {
+            return None;
+        }
         if self.is_truncated() {
             return Some(ox_core::i18n::gettext_static(
                 "First 500 results · narrow your search",
@@ -78,7 +81,7 @@ impl SearchReport {
     /// in a cached folder does not offer it, because the button would
     /// switch the folder's caching off.
     pub(crate) fn offers_to_cache_folder(&self) -> bool {
-        self.coverage != SearchSource::Cache
+        !matches!(self.coverage, SearchSource::Cache | SearchSource::LocalDisks)
     }
 
     /// What the status bar counts while `shown` results are shown.
@@ -86,7 +89,7 @@ impl SearchReport {
         let progress = match self.progress {
             SearchProgress::Searching => CountProgress::Searching,
             SearchProgress::Shown { is_truncated } => CountProgress::Shown {
-                is_truncated,
+                is_truncated: is_truncated && self.source != SearchSource::LocalDisks,
                 is_cached: self.source.uses_cache(),
             },
             SearchProgress::Failed(_) => CountProgress::Shown {
@@ -108,6 +111,9 @@ impl SearchReport {
             }
             SearchSource::CurrentFolderOnly => ox_core::i18n::gettext_static(
                 "Only this folder is being filtered. Enable its search cache to include subfolders.",
+            ),
+            SearchSource::LocalDisks => ox_core::i18n::gettext_static(
+                "No matches on the indexed local disks. Check which disks are indexed in Search settings.",
             ),
             SearchSource::Cache | SearchSource::CurrentFolderAndCachedSubfolders => {
                 ox_core::i18n::gettext_static(

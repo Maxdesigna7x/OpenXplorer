@@ -6,7 +6,7 @@ Search names and paths from a local index. Keep the boundaries clear.
 
 Settings → Search → Indexed folders → Manage lists folders, SMB shares and mounted volumes. Check a root or add a custom path to index its filenames and metadata. The initial scan does not download file contents. Settings → Search → Cache this folder for search indexes the folder you opened Settings from, as a folder's right-click menu does.
 
-Each mounted filesystem is selected separately. Selecting Local Disk does not automatically traverse every other mounted volume.
+Each mounted filesystem is selected separately. Selecting Local Disk does not automatically traverse every other mounted volume. In This PC, the search bar can reuse a compatible FSearch snapshot, including its indexed local disks, without creating another on-disk index. Refresh the snapshot in FSearch. If the snapshot is unavailable, This PC searches the folders enabled in OpenXplorer under Indexed folders.
 
 ## Local events, network checks
 
@@ -22,7 +22,7 @@ A result includes its parent path. Opening a directory navigates to the actual f
 
 ## Coverage and limits
 
-The current implementation limits an initial root scan to one million entries, watches up to 8,192 local directories, and uses timed fallback beyond watch coverage. Search displays the first 500 matches and indicates truncation. System/temporary trees, snapshot collections, links and nested mounts are excluded from whole-disk traversal.
+The current implementation limits an initial root scan to one million entries, stops growth when the cache drive is low on space, watches up to 8,192 local directories, and uses timed fallback beyond watch coverage. Folder search displays the first 500 matches and indicates truncation. This PC presents 500 matches per page and provides controls to browse the rest. System/temporary trees, snapshot collections, links and nested mounts are excluded from whole-disk traversal.
 
 ## The index stays on your machine
 

@@ -258,7 +258,9 @@ impl BrowserWindow {
         self.render_address(uri);
         let search = self.search_box();
         search.set_folder_title(&title);
-        search.set_enabled(!on_page && !in_zip && !is_device_location(uri));
+        search.set_enabled(
+            (!on_page || Page::from_uri(uri) == Some(Page::ThisPc)) && !in_zip && !is_device_location(uri),
+        );
         self.show_extract_button();
         self.update_more_menu();
         let tab = self.imp().session.borrow().active_id();

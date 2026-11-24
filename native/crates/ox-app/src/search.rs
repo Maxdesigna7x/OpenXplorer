@@ -45,5 +45,5 @@ pub(crate) use info_strip::{SearchInfoStrip, ShownOptions};
 pub(crate) use pin_sync::SettingsReading;
 pub(crate) use report::{SearchCount, RESULT_LIMIT};
 pub(crate) use results::{listed_matches_passing, merge_results, Listing};
-pub(crate) use source::{related_roots, SearchScope};
+pub(crate) use source::{related_roots, SearchScope, SearchSource};
 pub(crate) use writes::changed_folders;

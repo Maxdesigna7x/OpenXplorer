@@ -54,7 +54,8 @@ impl PaneState {
     pub(super) fn of(tab: &Tab) -> Self {
         Self {
             uri: tab.uri().to_owned(),
-            page: Page::drawn_at(tab.uri()),
+            page: Page::drawn_at(tab.uri())
+                .filter(|page| *page != Page::ThisPc || tab.history.current_search().is_none()),
             listing: match (tab.listing_state.is_listing(), tab.reloading) {
                 (false, _) => Listing::Idle,
                 (true, false) => Listing::First,

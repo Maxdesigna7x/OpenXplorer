@@ -7,18 +7,23 @@
 //! GIO worker thread once the index service has started; one that changes
 //! the cache reads the status again, so every window shows its effect.
 
+use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gio, glib};
 use ox_core::search::{
-    Caching, FrequentIndexing, HiddenItems, IndexService, PinIndexing, SearchError, SearchQuery,
-    SearchResults,
+    Caching, FacetMatcher, FrequentIndexing, FsearchSnapshot, HiddenItems, IndexService, LocalSearchPage,
+    PinIndexing, SearchError, SearchQuery, SearchResults,
 };
 use ox_core::settings::Bookmark;
 use ox_core::LOG_DOMAIN;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use super::{SearchCache, StatusReading};
 use crate::search::error::CacheError;
 use crate::search::indexer::{self, Indexer};
+
+static FSEARCH: LazyLock<FsearchSnapshot> = LazyLock::new(FsearchSnapshot::default);
 
 impl SearchCache {
     /// Searches the cache for `query` (the `search` bridge operation). A
@@ -35,6 +40,48 @@ impl SearchCache {
     ) -> Result<SearchResults, CacheError> {
         self.run(move |service| service.index().search(&query, Some(&cancellable)))
             .await
+    }
+
+    /// Searches the indexed roots belonging to available local disks.
+    pub(crate) async fn search_local_disks(
+        &self,
+        query: SearchQuery,
+        offset: usize,
+        facets: FacetMatcher,
+        mounted: Vec<PathBuf>,
+        network: Vec<PathBuf>,
+        cancellable: gio::Cancellable,
+    ) -> Result<SearchResults, CacheError> {
+        self.run(move |service| {
+            // Flatpak changes XDG_DATA_HOME for OpenXplorer, while FSearch's
+            // host index still lives in the user's ordinary data directory.
+            let host_snapshot = glib::home_dir().join(".local/share/fsearch/fsearch.db");
+            let xdg_snapshot = glib::user_data_dir().join("fsearch/fsearch.db");
+            for path in [&host_snapshot, &xdg_snapshot] {
+                if let Some(results) =
+                    FSEARCH.search(path, &query, offset, facets, (&mounted, &network), &cancellable)?
+                {
+                    return Ok(results);
+                }
+            }
+            let index = service.index();
+            let mut roots = Vec::new();
+            for root in index.roots()? {
+                if cancellable.is_cancelled() {
+                    return Err(SearchError::Cancelled);
+                }
+                if root.is_enabled() && local_root_available(&root.uri, &mounted, &network, &cancellable) {
+                    roots.push(root.uri);
+                }
+            }
+            let page = LocalSearchPage {
+                roots,
+                offset,
+                facets,
+            };
+            index.search_local_disks(&query, &page, Some(&cancellable))
+        })
+        .await
     }
 
     /// Chooses whether `uri` is indexed, under `label` (`cacheSet`,
@@ -303,4 +350,35 @@ impl SearchCache {
         .await;
         outcome.unwrap_or(Err(CacheError::WorkerLost))
     }
+}
+
+/// A native index root is eligible while its folder and backing disk are available.
+fn local_root_available(
+    uri: &str,
+    mounted: &[PathBuf],
+    network: &[PathBuf],
+    cancellable: &gio::Cancellable,
+) -> bool {
+    let Ok((path, host)) = glib::filename_from_uri(uri) else {
+        return false;
+    };
+    if host.is_some_and(|host| !host.is_empty() && !host.eq_ignore_ascii_case("localhost"))
+        || network.iter().any(|mount| path.starts_with(mount))
+    {
+        return false;
+    }
+    let is_removable_path = ["/media", "/run/media", "/mnt"]
+        .iter()
+        .any(|prefix| path.starts_with(Path::new(prefix)));
+    if (is_removable_path && !mounted.iter().any(|mount| path.starts_with(mount))) || !path.is_dir() {
+        return false;
+    }
+    gio::File::for_path(path)
+        .query_filesystem_info("filesystem::remote,filesystem::type", Some(cancellable))
+        .is_ok_and(|info| {
+            !info.boolean("filesystem::remote")
+                && !info
+                    .attribute_string("filesystem::type")
+                    .is_some_and(|kind| ox_core::location::is_network_filesystem(kind.as_str()))
+        })
 }

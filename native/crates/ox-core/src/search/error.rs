@@ -56,6 +56,9 @@ pub enum SearchError {
         )
     )]
     EntryLimit,
+    /// The volume holding the cache has reached its free-space reserve.
+    #[error("{}", crate::i18n::gettext("Indexing paused because the drive storing the search index is low on space. Free space and refresh the index."))]
+    IndexSpaceLow,
     /// A folder that frequent use added holds more entries than it may
     /// index (see [`super::frequent`]).
     #[error(

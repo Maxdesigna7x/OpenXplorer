@@ -82,22 +82,24 @@ impl KindFacet {
     /// Whether `entry` is of this kind. An entry whose type is unknown,
     /// as a cached result's is, is judged by the type its name suggests.
     pub fn matches(self, entry: &Entry) -> bool {
-        if matches!(self, KindFacet::Any | KindFacet::Folders) || entry.is_dir {
-            return self.matches_type(entry, "");
-        }
-        if let Some(content_type) = entry.content_type.as_deref() {
-            return self.matches_type(entry, content_type);
-        }
-        let (guessed, _) = gio::content_type_guess(Some(entry.name.as_str()), None);
-        self.matches_type(entry, &guessed)
+        self.matches_metadata(&entry.name, entry.is_dir, entry.content_type.as_deref())
     }
 
-    /// Whether `entry`, of `content_type`, is of this kind.
-    fn matches_type(self, entry: &Entry, content_type: &str) -> bool {
+    fn matches_metadata(self, name: &str, is_dir: bool, content_type: Option<&str>) -> bool {
+        if self == KindFacet::Any {
+            return true;
+        }
+        if self == KindFacet::Folders || is_dir {
+            return self == KindFacet::Folders && is_dir;
+        }
+        let guessed;
+        let content_type = if let Some(content_type) = content_type {
+            content_type
+        } else {
+            guessed = gio::content_type_guess(Some(name), None).0;
+            guessed.as_str()
+        };
         match self {
-            KindFacet::Any => true,
-            KindFacet::Folders => entry.is_dir,
-            _ if entry.is_dir => false,
             KindFacet::Documents => {
                 content_type.starts_with("text/")
                     || DOCUMENT_TYPES.iter().any(|known| {
@@ -107,6 +109,7 @@ impl KindFacet {
             KindFacet::Images => content_type.starts_with("image/"),
             KindFacet::Audio => content_type.starts_with("audio/"),
             KindFacet::Videos => content_type.starts_with("video/"),
+            KindFacet::Any | KindFacet::Folders => unreachable!("handled above"),
         }
     }
 }
@@ -361,14 +364,32 @@ impl FacetMatcher {
     /// modification time passes no date range, and a folder, or a file of
     /// unknown size, passes no size.
     pub fn matches(&self, entry: &Entry) -> bool {
+        self.matches_metadata(
+            &entry.name,
+            entry.is_dir,
+            entry.size,
+            entry.modified,
+            entry.content_type.as_deref(),
+        )
+    }
+
+    pub(super) fn matches_metadata(
+        &self,
+        name: &str,
+        is_dir: bool,
+        size: Option<u64>,
+        modified: Option<u64>,
+        content_type: Option<&str>,
+    ) -> bool {
         let in_range = self.range.is_none_or(|(from, until)| {
-            let modified = entry.modified.and_then(|seconds| i64::try_from(seconds).ok());
-            modified.is_some_and(|seconds| (from..until).contains(&seconds))
+            modified
+                .and_then(|seconds| i64::try_from(seconds).ok())
+                .is_some_and(|seconds| (from..until).contains(&seconds))
         });
-        let in_size = self.size.is_none_or(|(from, until)| {
-            !entry.is_dir && entry.size.is_some_and(|size| (from..=until).contains(&size))
-        });
-        !self.kinds_clash && in_range && in_size && self.kind.matches(entry)
+        let in_size = self
+            .size
+            .is_none_or(|(from, until)| !is_dir && size.is_some_and(|size| (from..=until).contains(&size)));
+        !self.kinds_clash && in_range && in_size && self.kind.matches_metadata(name, is_dir, content_type)
     }
 }
 

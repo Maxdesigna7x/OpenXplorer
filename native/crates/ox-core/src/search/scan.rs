@@ -192,6 +192,15 @@ impl SearchIndex {
         generation: &ScanGeneration,
         items: &[ListedItem],
     ) -> Result<usize, SearchError> {
+        // Full-disk scans must leave space for other applications and SQLite's WAL.
+        const FREE_SPACE_RESERVE: u64 = 768 * 1024 * 1024;
+        let space = rustix::fs::statvfs(self.directory()).map_err(|error| SearchError::Io {
+            path: self.directory().to_owned(),
+            error: error.into(),
+        })?;
+        if space.f_bavail.saturating_mul(space.f_frsize) < FREE_SPACE_RESERVE {
+            return Err(SearchError::IndexSpaceLow);
+        }
         let entries = entries_below(root, items)?;
         let mut connection = self.connect()?;
         let transaction = begin_immediate(&mut connection)?;

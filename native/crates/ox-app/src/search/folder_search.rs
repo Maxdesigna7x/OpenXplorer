@@ -45,6 +45,10 @@ pub(crate) struct SearchRun {
     /// cache or the listing changed, so it keeps them, their selection and
     /// the strip as they are rather than starting over.
     pub refreshes: bool,
+    /// First result position in the local disk search.
+    pub offset: usize,
+    /// Metadata filters selected for the run.
+    pub facets: SearchFacets,
     /// Cancelled when a newer edit replaces the run.
     pub cancellable: gio::Cancellable,
 }
@@ -86,6 +90,8 @@ pub(crate) struct FolderSearch {
     report: Option<SearchReport>,
     /// The rows of the last cached search, shown in place of the listing.
     results: Option<gio::ListStore>,
+    /// First result position in the local disk search.
+    offset: usize,
 }
 
 impl FolderSearch {
@@ -96,6 +102,7 @@ impl FolderSearch {
     pub(crate) fn edit(&mut self, text: &str, folder: &str, roots: &[IndexRoot]) {
         self.cancel();
         self.results = None;
+        self.offset = 0;
         text.clone_into(&mut self.query);
         self.typed = TypedQuery::parse(text);
         if !self.is_active() {
@@ -120,6 +127,7 @@ impl FolderSearch {
         self.cancel();
         self.results = None;
         self.query.clear();
+        self.offset = 0;
         self.typed = TypedQuery::default();
         self.scope = SearchScope::default();
         self.current_folder_only = false;
@@ -131,6 +139,10 @@ impl FolderSearch {
     /// folder, because the cache holds names only, and a folder on the
     /// network is only filtered.
     fn source(&self, roots: &[IndexRoot], folder: &str) -> SearchSource {
+        let source = SearchSource::choose(roots, folder, self.scope);
+        if source == SearchSource::LocalDisks {
+            return source;
+        }
         let reads_contents = self.search_in == SearchIn::NamesAndContents;
         // The cache finds names by their words: options typed alone, as
         // `kind:folder`, are looked for by walking the folder.
@@ -139,7 +151,7 @@ impl FolderSearch {
         let source = if walks && self.scope == SearchScope::ThisFolder {
             SearchSource::CurrentFolder
         } else {
-            SearchSource::choose(roots, folder, self.scope)
+            source
         };
         if self.current_folder_only && self.scope == SearchScope::ThisFolder {
             // Names are found in the listing; the files' text only by
@@ -238,6 +250,35 @@ impl FolderSearch {
     /// Chooses the search options; the caller filters the rows again.
     pub(crate) fn set_facets(&mut self, facets: SearchFacets) {
         self.facets = facets;
+        self.offset = 0;
+    }
+
+    /// Paging state for This PC, if that search is active.
+    pub(crate) fn local_page(&self) -> Option<(usize, bool, bool)> {
+        use super::report::{SearchProgress, RESULT_LIMIT};
+        let report = self.report.as_ref()?;
+        (report.source == SearchSource::LocalDisks).then(|| {
+            let loading = report.progress == SearchProgress::Searching;
+            let more = matches!(report.progress, SearchProgress::Shown { is_truncated: true });
+            (self.offset / RESULT_LIMIT, more, loading)
+        })
+    }
+
+    /// Moves one page while the current page is available.
+    pub(crate) fn turn_local_page(&mut self, forward: bool) -> bool {
+        use super::report::RESULT_LIMIT;
+        let Some((page, more, false)) = self.local_page() else {
+            return false;
+        };
+        if (forward && !more) || (!forward && page == 0) {
+            return false;
+        }
+        self.offset = if forward {
+            self.offset.saturating_add(RESULT_LIMIT)
+        } else {
+            self.offset.saturating_sub(RESULT_LIMIT)
+        };
+        true
     }
 
     /// Starts the search of `folder`, with the indexed folders `roots`.
@@ -311,6 +352,8 @@ impl FolderSearch {
             search_in: self.search_in,
             subfolders: !self.current_folder_only,
             refreshes,
+            offset: self.offset,
+            facets: self.facets,
             cancellable,
         }
     }
