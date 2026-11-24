@@ -438,9 +438,8 @@ pub struct Preferences {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub restore_session: bool,
     /// Where new windows open, as a canonical location or a landing page
-    /// such as This PC; Home when unset (Dolphin's `HomeUrl`, Explorer's
-    /// "Open File Explorer to").
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// such as This PC. An explicit Home choice is stored as an empty string.
+    #[serde(serialize_with = "serialize_startup_folder")]
     pub startup_folder: Option<String>,
     /// New windows open split in two panes (Dolphin's `SplitView`).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -655,7 +654,7 @@ impl Default for Preferences {
             favorites: Vec::new(),
             home_folded: Vec::new(),
             restore_session: false,
-            startup_folder: None,
+            startup_folder: Some(location::PC_URI.to_owned()),
             begin_in_split_view: false,
             tab_switches_split_panes: false,
             folder_tree: FolderTreeOptions::default(),
@@ -1149,6 +1148,17 @@ pub struct PreferencesUpdate {
     pub update_notice_dismissed: Option<String>,
 }
 
+#[allow(
+    clippy::ref_option,
+    reason = "Serde passes a field reference to its serializer"
+)]
+fn serialize_startup_folder<S>(folder: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(folder.as_deref().unwrap_or_default())
+}
+
 impl PreferencesUpdate {
     /// Reads a preferences object from untrusted JSON (the file, or a
     /// request from another window). Values of the wrong JSON type and
@@ -1486,13 +1496,28 @@ mod tests {
     /// and its closed details pane where the Python app had it open.
     /// parity: SET-016
     #[test]
-    fn default_preferences_are_stored_like_the_python_app() {
+    fn default_preferences_keep_the_python_app_keys() {
         let stored = serde_json::to_value(Preferences::default()).unwrap();
-        let python = json!({
+        let expected = json!({
             "theme": "system", "view": "details", "details": false, "showHidden": false,
-            "autoIndex": true, "contextMenu": "win11", "networkInterval": 60, "textSize": 100
+            "autoIndex": true, "contextMenu": "win11", "networkInterval": 60, "textSize": 100,
+            "startupFolder": location::PC_URI
         });
-        assert_eq!(stored, python);
+        assert_eq!(stored, expected);
+    }
+
+    #[test]
+    fn an_explicit_home_startup_survives_saving_and_reopening() {
+        let mut chosen = Preferences::default();
+        assert_eq!(chosen.startup_folder.as_deref(), Some(location::PC_URI));
+        chosen.apply(&PreferencesUpdate {
+            startup_folder: Some(String::new()),
+            ..PreferencesUpdate::default()
+        });
+        let json = serde_json::to_value(&chosen).expect("save preferences");
+        let mut reopened = Preferences::default();
+        reopened.apply(&PreferencesUpdate::from_json(&json).expect("read preferences"));
+        assert_eq!(reopened.startup_folder, None);
     }
 
     /// The same validation handles both changed preferences and older

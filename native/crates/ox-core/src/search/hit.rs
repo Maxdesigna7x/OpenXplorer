@@ -15,10 +15,13 @@ impl SearchHit {
     ///
     /// The cache stores only real, non-virtual items and never follows
     /// links (SRCH-031), so a hit can be operated on like any listed item.
-    /// What the cache does not store, the content type, access flags and
-    /// icon, is left unknown, as for a backend that does not report them;
-    /// the views then pick the icon by name.
+    /// Guess the file type from its name so the view can request previews
+    /// without opening every file in the results.
     pub fn into_entry(self) -> Entry {
+        let content_type = (!self.is_dir)
+            .then(|| gio::content_type_guess(Some(&self.name), None))
+            .filter(|(content_type, _)| !gio::content_type_is_unknown(content_type))
+            .map(|(content_type, _)| content_type.to_string());
         Entry {
             uri: self.uri,
             name: self.name,
@@ -29,7 +32,7 @@ impl SearchHit {
             target_uri: None,
             size: self.size,
             type_label: self.type_label,
-            content_type: None,
+            content_type,
             modified: self.modified,
             is_hidden: self.is_hidden,
             is_symlink: false,
@@ -71,6 +74,7 @@ mod tests {
         assert_eq!(entry.kind, EntryKind::File);
         assert!(!entry.is_dir);
         assert_eq!(entry.size, Some(12));
+        assert_eq!(entry.content_type.as_deref(), Some("application/pdf"));
         assert!(entry.can_operate, "results are real items");
         assert!(!entry.is_virtual);
         assert_eq!(entry.navigation_uri(), hit.uri);

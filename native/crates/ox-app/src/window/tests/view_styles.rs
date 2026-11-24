@@ -746,12 +746,11 @@ fn open_file_explorer_to_chooses_where_new_windows_open() {
     let options = open_folder_options(&test);
     let drop_down = choice(&options);
     assert_eq!(labels(&drop_down), ["Home", "This PC"]);
-    assert_eq!(drop_down.selected(), 0);
-    drop_down.set_selected(1);
+    assert_eq!(drop_down.selected(), 1, "This PC");
+    drop_down.set_selected(0);
     close_folder_options(&test, &options, "OK");
-    wait_until("This PC saved", || {
-        test.context.settings_data().preferences.startup_folder.as_deref()
-            == Some(crate::locations::Page::ThisPc.uri())
+    wait_until("Home saved", || {
+        test.context.settings_data().preferences.startup_folder.is_none()
     });
 
     change_preferences(
@@ -773,7 +772,7 @@ fn open_file_explorer_to_chooses_where_new_windows_open() {
     assert_eq!(labels(&drop_down).len(), 3, "the folder chosen in Settings");
     assert_eq!(drop_down.selected(), 2);
     tab_button(&options, "General", "Restore Defaults").emit_clicked();
-    assert_eq!(drop_down.selected(), 0, "Home");
+    assert_eq!(drop_down.selected(), 1, "This PC");
     close_folder_options(&test, &options, "Cancel");
     settle();
     assert!(test

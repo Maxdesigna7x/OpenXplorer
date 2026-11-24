@@ -244,6 +244,7 @@ fn unknown_keys_are_dropped_and_whitelisted_ones_survive_a_rust_write() {
         .as_object_mut()
         .unwrap()
         .remove("futureSetting");
+    expected_preferences["startupFolder"] = json!(crate::location::PC_URI);
     assert_eq!(written["preferences"], expected_preferences);
     assert!(written.get("futureSection").is_none());
     assert_eq!(

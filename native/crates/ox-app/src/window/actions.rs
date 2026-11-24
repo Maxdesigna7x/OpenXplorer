@@ -175,8 +175,8 @@ impl BrowserWindow {
                 if window.refuse_while_tabs_move() {
                     return;
                 }
-                let home = window.home_location();
-                if let Err(error) = window.add_tab(&home) {
+                let start = crate::application::startup_location(window.context());
+                if let Err(error) = window.add_tab(&start) {
                     window.show_message(&error.to_string());
                 }
             }),
