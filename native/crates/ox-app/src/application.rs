@@ -22,6 +22,7 @@ mod command_line;
 mod file_dialogs;
 mod requests;
 mod state;
+pub(crate) use state::startup_location;
 
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;

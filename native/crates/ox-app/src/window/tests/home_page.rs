@@ -101,6 +101,17 @@ fn home_is_the_home_folder_by_default_and_the_setting_opens_windows_home() {
         ["Quick access", "Recent", "Favorites"]
     );
     assert_eq!(home_page::shown_tab_title(body(&test)).as_deref(), Some("Recent"));
+    let update = PreferencesUpdate {
+        startup_folder: Some(String::new()),
+        ..PreferencesUpdate::default()
+    };
+    Settings::open(test.settings_directory())
+        .update_preferences(&update)
+        .expect("the settings file takes the choice");
+    test.context.reload_settings();
+    wait_until("Home as the startup page", || {
+        test.context.settings_data().preferences.startup_folder.is_none()
+    });
     test.activate("new-tab", None);
     wait_until("a new tab on Home", || {
         test.window.tab_count() == 2 && test.window.current_uri().as_deref() == Some(HOME_PAGE)

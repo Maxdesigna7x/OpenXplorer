@@ -565,7 +565,12 @@ impl OptionsForm {
             shown.show((shown.setting.read)(&defaults));
         }
         if tab == Tab::General {
-            self.start.set_selected(0);
+            let index = self
+                .places
+                .iter()
+                .position(|place| *place == defaults.startup_folder)
+                .unwrap_or(0);
+            self.start.set_selected(u32::try_from(index).unwrap_or(0));
         }
     }
 

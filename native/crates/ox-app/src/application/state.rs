@@ -387,7 +387,7 @@ pub(super) fn open_window(
 /// Where a new window opens without a location: the startup folder of the
 /// settings while it is a folder that exists, else the home folder
 /// (TAB-055).
-fn startup_location(context: &AppContext) -> String {
+pub(crate) fn startup_location(context: &AppContext) -> String {
     let chosen = context.settings_data().preferences.startup_folder;
     let exists = |uri: &String| {
         let file = gio::File::for_uri(uri);
@@ -647,14 +647,13 @@ mod tests {
 
     /// parity: TAB-042
     #[gtk::test]
-    fn a_new_window_starts_in_the_home_folder() {
+    fn a_new_window_starts_in_this_pc_by_default() {
         let app = TestApp::new();
         app.state.activate(&application());
         let [window] = &browser_windows()[..] else {
             panic!("one window is open");
         };
-        let home = file_uri(&glib::home_dir());
-        assert_eq!(window.current_uri(), Some(home));
+        assert_eq!(window.current_uri().as_deref(), Some(VirtualPlace::ThisPc.uri()));
     }
 
     #[gtk::test]
@@ -683,7 +682,13 @@ mod tests {
     fn ctrl_n_opens_another_window_at_the_current_folder() {
         // Declared first so it outlives the app, whose windows show it.
         let fixture = Fixture::standard();
-        let app = TestApp::new();
+        let settings = tempfile::tempdir().expect("room for settings");
+        fs::write(
+            settings.path().join(Settings::FILE_NAME),
+            r#"{"preferences":{"startupFolder":""}}"#,
+        )
+        .expect("save Home as the startup folder");
+        let app = TestApp::with_settings_folder(settings);
         app.state.activate(&application());
         app.state.open(&application(), &[gio_file(fixture.root())]);
         let first = browser_windows()[0].clone();
@@ -1347,12 +1352,14 @@ mod tests {
         let first = app.state.open_window(&application(), None).downgrade();
         let second = app.state.open_window(&application(), None).downgrade();
         first.upgrade().expect("the first window is open").close();
-        settle();
-        assert!(first.upgrade().is_none(), "a closed window is released");
+        wait_until("the first closed window to be released", || {
+            first.upgrade().is_none()
+        });
         assert!(second.upgrade().is_some());
         second.upgrade().expect("the second window is open").close();
-        settle();
-        assert!(second.upgrade().is_none());
+        wait_until("the second closed window to be released", || {
+            second.upgrade().is_none()
+        });
         assert!(browser_windows().is_empty());
     }
 }

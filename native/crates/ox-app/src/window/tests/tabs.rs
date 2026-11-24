@@ -278,15 +278,16 @@ fn tabs_are_announced_as_tabs_with_their_selected_state() {
 
 /// parity: TAB-001
 #[gtk::test]
-fn the_new_tab_button_opens_the_home_folder_in_front() {
+fn the_new_tab_button_opens_this_pc_in_front() {
     let fixture = Fixture::standard();
     let test = TestWindow::open(&fixture.uri());
     let button = &test.window.imp().new_tab_button;
     assert_eq!(button.tooltip_text().as_deref(), Some("New tab (Ctrl+T)"));
     button.emit_clicked();
-    test.wait_for_listing("the home folder");
-    let home = ox_core::location::file_uri(&gtk::glib::home_dir());
-    assert_eq!(test.window.current_uri(), Some(home));
+    assert_eq!(
+        test.window.current_uri().as_deref(),
+        Some(ox_core::location::PC_URI)
+    );
     assert_eq!(test.window.tab_count(), 2);
 }
 

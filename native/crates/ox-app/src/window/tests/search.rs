@@ -12,10 +12,10 @@ use ox_core::search::{
 };
 
 use super::file_ops_support::{is_enabled, select_names};
-use crate::folder_view::sorting::SortColumn;
+use crate::folder_view::{cells::FileCell, sorting::SortColumn};
 use crate::search::SearchScope;
 use crate::test_support::harness::{
-    capture, wait_for_frames, wait_until, Fixture, OpenedWindows, TestWindow, STANDARD_NAMES,
+    capture, descendants, wait_for_frames, wait_until, Fixture, OpenedWindows, TestWindow, STANDARD_NAMES,
 };
 use crate::window::activation::{activation_for, Activation};
 use crate::window::folder_pane::PanePage;
@@ -311,6 +311,31 @@ fn an_indexed_folder_is_searched_in_the_cache_with_its_subfolders() {
     let expected = fixture.path("Documents/Deep");
     assert_eq!(deep.folder_path().text, expected.to_string_lossy());
     capture(&test.window, "search-cached.png");
+}
+
+#[gtk::test]
+fn this_pc_search_shows_a_thumbnail_for_an_indexed_picture() {
+    let fixture = Fixture::standard();
+    let picture = gtk::gdk_pixbuf::Pixbuf::new(gtk::gdk_pixbuf::Colorspace::Rgb, false, 8, 64, 32)
+        .expect("a synthetic picture");
+    picture.fill(0x3377_ccff);
+    picture
+        .savev(fixture.path("Documents/Thumbnail sample.png"), "png", &[])
+        .expect("save the fixture");
+    let test = TestWindow::open(&fixture.uri());
+    test.start_search_cache();
+    test.index_folder(&fixture.uri());
+    test.window.navigate(ox_core::location::PC_URI).expect("This PC");
+    test.search_for("Thumbnail sample");
+    wait_until("the indexed picture to be found", || {
+        test.names() == ["Thumbnail sample.png"]
+    });
+    test.activate("view", Some("large"));
+    wait_until("the search result to show a thumbnail", || {
+        descendants::<FileCell>(test.window.folder_pane())
+            .into_iter()
+            .any(|cell| cell.is_mapped() && cell.shows_custom_icon())
+    });
 }
 
 /// A folder with only an indexed subfolder shows its own matches and the

@@ -4,13 +4,13 @@
 
 ## Instalar en Zorin OS
 
-Descarga el [Flatpak de OpenXplorer RANDY](https://github.com/Maxdesigna7x/OpenXplorer/releases/download/v2.0.18-randy.5/OpenXplorer-RANDY-2.0.18.flatpak) para Linux x86-64. Ábrelo en la tienda de software o ejecuta lo siguiente desde la carpeta de descarga.
+Descarga el [Flatpak de OpenXplorer RANDY](https://github.com/Maxdesigna7x/OpenXplorer/releases/download/v2.0.18-randy.6/OpenXplorer-RANDY-2.0.18.flatpak) para Linux x86-64. Ábrelo en la tienda de software o ejecuta lo siguiente desde la carpeta de descarga.
 
 ```sh
 flatpak install --user ./OpenXplorer-RANDY-2.0.18.flatpak
 ```
 
-Abre **OpenXplorer RANDY** desde el menú de aplicaciones. El paquete usa el runtime GNOME 51 de Flathub. En la [publicación de GitHub](https://github.com/Maxdesigna7x/OpenXplorer/releases/tag/v2.0.18-randy.5) también están el código fuente correspondiente y la suma SHA-256.
+Abre **OpenXplorer RANDY** desde el menú de aplicaciones. El paquete usa el runtime GNOME 51 de Flathub. En la [publicación de GitHub](https://github.com/Maxdesigna7x/OpenXplorer/releases/tag/v2.0.18-randy.6) también están el código fuente correspondiente y la suma SHA-256.
 
 Para generar el paquete desde el código, usa `tools/build-randy-flatpak.sh` en un entorno de compilación con Rust, las bibliotecas de [native](native/README.md) y el SDK GNOME 51.
 
@@ -20,10 +20,10 @@ Modificaciones de esta edición al 24 de noviembre de 2026.
 
 - Iconos de carpetas y tipos de archivo del tema de escritorio, con prioridad para los iconos personalizados que guarda GNOME Archivos.
 - Espaciado y relleno de la cuadrícula, radio de las esquinas, selección azul opcional y paletas independientes para los modos claro y oscuro. Cada color tiene una muestra en la lista y un selector visual con comparación del color anterior y el nuevo, y valores HSV opcionales.
-- Inicio en **This PC** y activación de ventanas al pasar por la barra de Zorin durante un arrastre en X11.
+- Inicio y pestañas nuevas en **This PC** por defecto. Incluye activación de ventanas al pasar por la barra de Zorin durante un arrastre en X11.
 - Uso de las asociaciones del escritorio y del selector del sistema en Flatpak, miniaturas compartidas con GNOME Archivos y acceso al Google Drive de las Cuentas en línea de GNOME desde **Network** y la sección **Network locations** de **This PC**.
 - **Local Disk** muestra la capacidad real del disco raíz. Al abrirlo desde el Flatpak, lleva a tu carpeta personal dentro de OpenXplorer RANDY.
-- Búsqueda en **This PC** con páginas de resultados. Usa el índice compatible de FSearch en modo de solo lectura para evitar guardar otra copia en el disco. Si FSearch no tiene un índice compatible, usa las carpetas indexadas en OpenXplorer.
+- Búsqueda en **This PC** con páginas de resultados y miniaturas de archivos compatibles. Usa el índice compatible de FSearch en modo de solo lectura para evitar guardar otra copia en el disco. Si FSearch no tiene un índice compatible, usa las carpetas indexadas en OpenXplorer.
 - Flatpak separado con identificador `io.winspace.Development.Native`.
 
 La edición conserva [AGPL-3.0-only](LICENSE) para las modificaciones y los avisos de [atribución](NOTICE), [licencias de terceros](THIRD_PARTY_NOTICES.md) y [Winspace](licenses/) del proyecto original. El código de la aplicación y las instrucciones de compilación están en [native](native/README.md).
