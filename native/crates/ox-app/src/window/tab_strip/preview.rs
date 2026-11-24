@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-use gtk::{gdk, graphene};
+use gtk::{gdk, graphene, gsk};
 
 use super::{TabId, TabView};
 use crate::window::BrowserWindow;
@@ -107,7 +107,6 @@ fn picture(widget: &impl IsA<gtk::Widget>) -> Option<gdk::Texture> {
     if !widget.is_mapped() {
         return None;
     }
-    let renderer = widget.native()?.renderer()?;
     let width = widget.width() as f32;
     let height = widget.height() as f32;
     if width <= 0.0 || height <= 0.0 {
@@ -119,15 +118,14 @@ fn picture(widget: &impl IsA<gtk::Widget>) -> Option<gdk::Texture> {
     let paintable = gtk::WidgetPaintable::new(Some(widget));
     paintable.snapshot(&snapshot, f64::from(width), f64::from(height));
     let node = snapshot.to_node()?;
-    Some(renderer.render_texture(
-        &node,
-        Some(&graphene::Rect::new(
-            0.0,
-            0.0,
-            (width * scale).ceil(),
-            (height * scale).ceil(),
-        )),
-    ))
+    // Tab changes can run while the window renderer is busy. Rasterize the
+    // small preview independently, without asking the live GPU for a texture.
+    let renderer = gsk::CairoRenderer::new();
+    renderer.realize_for_display(&widget.display()).ok()?;
+    let bounds = graphene::Rect::new(0.0, 0.0, (width * scale).ceil(), (height * scale).ceil());
+    let texture = renderer.render_texture(&node, Some(&bounds));
+    renderer.unrealize();
+    Some(texture)
 }
 
 #[cfg(test)]

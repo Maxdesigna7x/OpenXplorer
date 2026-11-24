@@ -326,6 +326,10 @@ msgid "Open Settings"
 msgstr ""
 
 #: crates/ox-app/src/application/command_line.rs
+msgid "Open This PC in a new window"
+msgstr ""
+
+#: crates/ox-app/src/application/command_line.rs
 msgid "Reveal files in their parent folders"
 msgstr ""
 

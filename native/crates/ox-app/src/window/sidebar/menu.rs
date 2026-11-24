@@ -422,10 +422,10 @@ impl Sidebar {
                 MenuItem::with_text_target(&ox_core::i18n::gettext(label), glyph, action, uri).into()
             };
             let options = self.branch_options();
-            let option = |label, key: &str, checked| {
+            let option = |label, glyph, key: &str, checked| {
                 let item = MenuItem::with_text_target(
                     &ox_core::i18n::gettext(label),
-                    Icon::Eye,
+                    glyph,
                     WindowAction::FolderTreeOption,
                     key,
                 );
@@ -444,8 +444,18 @@ impl Sidebar {
                 ),
                 target("Properties", Icon::Info, WindowAction::PropertiesOf),
                 MenuEntry::Divider,
-                option("Show hidden folders", "show-hidden", options.show_hidden),
-                option("Scroll to the folder shown", "auto-scroll", options.auto_scroll),
+                option(
+                    "Show hidden folders",
+                    Icon::Eye,
+                    "show-hidden",
+                    options.show_hidden,
+                ),
+                option(
+                    "Scroll to the folder shown",
+                    Icon::ArrowDown,
+                    "auto-scroll",
+                    options.auto_scroll,
+                ),
             ]);
         }
         if entry.level == RowLevel::Group {

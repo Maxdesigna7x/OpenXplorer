@@ -22,6 +22,8 @@ use ox_core::network::outside_location;
 pub(super) enum CommandOption {
     /// `--new-window`: the locations open in a window of their own.
     NewWindow,
+    /// Opens This PC in a new window for a desktop shortcut.
+    ThisPc,
     /// `--windows`: shows the list of open windows.
     Windows,
     /// `--settings`: opens Settings.
@@ -43,8 +45,9 @@ pub(super) enum CommandOption {
 
 impl CommandOption {
     /// Every option, in `CLI_OPTIONS` order.
-    pub(super) const ALL: [Self; 8] = [
+    pub(super) const ALL: [Self; 9] = [
         Self::NewWindow,
+        Self::ThisPc,
         Self::Windows,
         Self::Settings,
         Self::Select,
@@ -58,6 +61,7 @@ impl CommandOption {
     pub(super) const fn name(self) -> &'static str {
         match self {
             Self::NewWindow => "new-window",
+            Self::ThisPc => "this-pc",
             Self::Windows => "windows",
             Self::Settings => "settings",
             Self::Select => "select",
@@ -73,6 +77,7 @@ impl CommandOption {
     pub(super) fn description(self) -> &'static str {
         match self {
             Self::NewWindow => ox_core::i18n::gettext_static("Create a separate OpenXplorer window"),
+            Self::ThisPc => ox_core::i18n::gettext_static("Open This PC in a new window"),
             Self::Windows => ox_core::i18n::gettext_static("Show existing OpenXplorer windows"),
             Self::Settings => ox_core::i18n::gettext_static("Open Settings"),
             Self::Select => ox_core::i18n::gettext_static("Reveal files in their parent folders"),
@@ -195,6 +200,8 @@ impl CommandRequest {
                 locations,
                 new_window: has_option(CommandOption::NewWindow),
             }
+        } else if has_option(CommandOption::ThisPc) {
+            Self::NewWindow(vec![ox_core::location::PC_URI.to_owned()])
         } else if has_option(CommandOption::NewWindow) {
             Self::NewWindow(locations)
         } else if locations.is_empty() {
@@ -272,6 +279,11 @@ mod tests {
                 options: &[CommandOption::Settings],
                 locations: &[],
                 request: CommandRequest::Settings,
+            },
+            RequestCase {
+                options: &[CommandOption::ThisPc],
+                locations: &[],
+                request: CommandRequest::NewWindow(vec![ox_core::location::PC_URI.to_owned()]),
             },
             RequestCase {
                 options: &[CommandOption::NewWindow],
@@ -378,12 +390,13 @@ mod tests {
     }
 
     #[test]
-    fn the_options_keep_the_python_names() {
+    fn the_options_include_the_this_pc_shortcut() {
         let names = CommandOption::ALL.map(CommandOption::name);
         assert_eq!(
             names,
             [
                 "new-window",
+                "this-pc",
                 "windows",
                 "settings",
                 "select",

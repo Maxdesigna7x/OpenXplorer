@@ -21,6 +21,9 @@ pub(super) struct Branches {
     expanded: HashSet<String>,
     folders: HashMap<String, Vec<SidebarEntry>>,
     loading: HashMap<String, u64>,
+    has_children: HashMap<String, bool>,
+    probing: bool,
+    rebuild_pending: bool,
     next_request: u64,
 }
 
@@ -77,9 +80,12 @@ impl Sidebar {
         let expanded = branch
             .as_ref()
             .map(|uri| self.imp().branches.borrow().expanded.contains(uri));
+        let can_expand = branch.as_ref().is_some_and(|uri| self.has_children(uri));
         let row = row::sidebar_row(entry, self.row_look(), self.is_collapsed(entry.section), expanded);
         if let Some((uri, expanded)) = branch.zip(expanded) {
             if let Some(chevron) = row::chevron(&row) {
+                chevron.set_visible(can_expand);
+                row.update_state(&[gtk::accessible::State::Expanded(can_expand.then_some(expanded))]);
                 chevron.connect_clicked(glib::clone!(
                     #[weak(rename_to = sidebar)]
                     self,
@@ -90,6 +96,68 @@ impl Sidebar {
             }
         }
         row
+    }
+
+    fn has_children(&self, uri: &str) -> bool {
+        let branches = self.imp().branches.borrow();
+        branches.folders.get(uri).map_or_else(
+            || branches.has_children.get(uri) == Some(&true),
+            |children| !children.is_empty(),
+        )
+    }
+
+    fn queue_branch_redraw(&self) {
+        if self.imp().branches.borrow().rebuild_pending {
+            return;
+        }
+        self.imp().branches.borrow_mut().rebuild_pending = true;
+        glib::idle_add_local_once(glib::clone!(
+            #[weak(rename_to = sidebar)]
+            self,
+            move || {
+                sidebar.imp().branches.borrow_mut().rebuild_pending = false;
+                sidebar.rebuild_branches();
+                sidebar.scroll_to_active_row();
+            }
+        ));
+    }
+
+    fn scroll_to_active_row(&self) {
+        if !self.branch_options().auto_scroll {
+            return;
+        }
+        let Some(row) = self
+            .list()
+            .selected_row()
+            .filter(|row| row.has_css_class("branch"))
+        else {
+            return;
+        };
+        let exact = {
+            let entries = self.imp().entries.borrow();
+            let location = self.imp().location.borrow();
+            usize::try_from(row.index()).ok().and_then(|index| entries.get(index))
+                .is_some_and(|entry| matches!(&entry.target, RowTarget::Location(uri) if Some(uri) == location.as_ref()))
+        };
+        if exact && row.is_mapped() {
+            row.add_tick_callback(|row, _| {
+                if row.is_selected() && row.height() > 0 {
+                    if let Some(viewport) = row
+                        .ancestor(gtk::Viewport::static_type())
+                        .and_downcast::<gtk::Viewport>()
+                    {
+                        if let Some(bounds) = row.compute_bounds(&viewport) {
+                            let Some(adjustment) = viewport.vadjustment() else {
+                                return glib::ControlFlow::Break;
+                            };
+                            let top = f64::from(bounds.y()) + adjustment.value();
+                            adjustment.clamp_page(top, top + f64::from(bounds.height()));
+                        }
+                    }
+                }
+                glib::ControlFlow::Break
+            });
+        }
     }
 
     pub(super) fn rebuild_branches(&self) {
@@ -110,6 +178,7 @@ impl Sidebar {
         self.set_entries(entries);
         self.mark_hidden(hidden);
         self.highlight_location();
+        self.start_branch_probe();
         if let Some(target) = focused {
             let index = self
                 .imp()
@@ -121,6 +190,74 @@ impl Sidebar {
                 if row.is_visible() {
                     row.grab_focus();
                     self.highlight_location();
+                }
+            }
+        }
+    }
+
+    pub(super) fn start_branch_probe(&self) {
+        let mut branches = self.imp().branches.borrow_mut();
+        if branches.probing || !branches.options.shown {
+            return;
+        }
+        branches.probing = true;
+        drop(branches);
+        let sidebar = self.downgrade();
+        glib::spawn_future_local(async move {
+            while let Some(sidebar) = sidebar.upgrade() {
+                let Some(uri) = sidebar.next_probe() else {
+                    sidebar.imp().branches.borrow_mut().probing = false;
+                    break;
+                };
+                let hidden = sidebar.branch_options().show_hidden;
+                let weak = sidebar.downgrade();
+                drop(sidebar);
+                let result = probe_folders(&uri, hidden).await;
+                let Some(sidebar) = weak.upgrade() else { break };
+                if sidebar.branch_options().show_hidden != hidden {
+                    continue;
+                }
+                sidebar
+                    .imp()
+                    .branches
+                    .borrow_mut()
+                    .has_children
+                    .insert(uri.clone(), result);
+                sidebar.update_branch_chevrons(&uri);
+            }
+        });
+    }
+
+    fn next_probe(&self) -> Option<String> {
+        let branches = self.imp().branches.borrow();
+        if !branches.options.shown || self.is_collapsed(Section::ThisPc) {
+            return None;
+        }
+        self.imp()
+            .entries
+            .borrow()
+            .iter()
+            .filter_map(|entry| self.drive_key(entry))
+            .find(|uri| {
+                !branches.folders.contains_key(uri)
+                    && !branches.has_children.contains_key(uri)
+                    && !branches.loading.contains_key(uri)
+            })
+    }
+
+    fn update_branch_chevrons(&self, uri: &str) {
+        let visible = self.has_children(uri);
+        let expanded = self.imp().branches.borrow().expanded.contains(uri);
+        for (index, entry) in self.imp().entries.borrow().iter().enumerate() {
+            if self.drive_key(entry).as_deref() == Some(uri) {
+                if let Some(row) = i32::try_from(index)
+                    .ok()
+                    .and_then(|index| self.list().row_at_index(index))
+                {
+                    if let Some(chevron) = row::chevron(&row) {
+                        chevron.set_visible(visible);
+                        row.update_state(&[gtk::accessible::State::Expanded(visible.then_some(expanded))]);
+                    }
                 }
             }
         }
@@ -148,6 +285,9 @@ impl Sidebar {
             .filter(|drive| target.equal(drive) || target.has_prefix(drive))
             .max_by_key(|drive| drive.uri().len());
         let Some(drive) = drive else { return };
+        if target.equal(&drive) {
+            return;
+        }
         // Only the ancestors of the current folder, and the folder itself,
         // are opened. Sibling drives and folders wait for their chevron.
         let mut path = Vec::new();
@@ -182,7 +322,7 @@ impl Sidebar {
             self.load_branch(uri);
         }
         if changed {
-            self.rebuild_branches();
+            self.queue_branch_redraw();
         }
     }
 
@@ -191,6 +331,7 @@ impl Sidebar {
             let mut branches = self.imp().branches.borrow_mut();
             branches.folders.clear();
             branches.loading.clear();
+            branches.has_children.clear();
             branches.expanded.clone()
         };
         if self.branch_options().shown {
@@ -205,7 +346,7 @@ impl Sidebar {
         let Some(uri) = self.focused_entry().and_then(|entry| self.drive_key(&entry)) else {
             return false;
         };
-        self.branch_options().shown && self.set_branch(&uri, expand)
+        self.branch_options().shown && (!expand || self.has_children(&uri)) && self.set_branch(&uri, expand)
     }
 
     pub(super) fn open_all_below_focused(&self) -> bool {
@@ -299,37 +440,8 @@ impl Sidebar {
                     branches.folders.insert(uri, folders);
                 }
             }
-            sidebar.rebuild_branches();
-            if sidebar.branch_options().auto_scroll {
-                sidebar.scroll_to_loaded_location();
-            }
+            sidebar.queue_branch_redraw();
         });
-    }
-
-    fn scroll_to_loaded_location(&self) {
-        let Some(row) = self
-            .list()
-            .selected_row()
-            .filter(|row| row.has_css_class("branch"))
-        else {
-            return;
-        };
-        let location = self.imp().location.borrow();
-        let entries = self.imp().entries.borrow();
-        let exact = usize::try_from(row.index())
-            .ok()
-            .and_then(|index| entries.get(index))
-            .is_some_and(
-                |entry| matches!(&entry.target, RowTarget::Location(uri) if Some(uri) == location.as_ref()),
-            );
-        if exact {
-            if let Some(viewport) = row
-                .ancestor(gtk::Viewport::static_type())
-                .and_downcast::<gtk::Viewport>()
-            {
-                viewport.scroll_to(&row, None);
-            }
-        }
     }
 }
 
@@ -350,6 +462,32 @@ impl Branches {
             }
         }
     }
+}
+
+async fn probe_folders(uri: &str, show_hidden: bool) -> bool {
+    let file = gio::File::for_uri(uri);
+    let Ok(enumerator) = file
+        .enumerate_children_future(
+            "standard::type,standard::is-hidden",
+            gio::FileQueryInfoFlags::NOFOLLOW_SYMLINKS,
+            glib::Priority::LOW,
+        )
+        .await
+    else {
+        return false;
+    };
+    while let Ok(infos) = enumerator.next_files_future(32, glib::Priority::LOW).await {
+        if infos.is_empty() {
+            break;
+        }
+        if infos
+            .iter()
+            .any(|info| info.file_type() == gio::FileType::Directory && (show_hidden || !info.is_hidden()))
+        {
+            return true;
+        }
+    }
+    false
 }
 
 async fn read_folders(uri: &str, show_hidden: bool) -> Option<Vec<SidebarEntry>> {

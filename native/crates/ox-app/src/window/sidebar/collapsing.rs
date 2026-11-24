@@ -70,6 +70,9 @@ impl Sidebar {
             }
         }
         self.highlight_location();
+        if section == Section::ThisPc && !collapsed {
+            self.start_branch_probe();
+        }
     }
 
     /// A drag is at `y` of the list, or left it with `None`: held over the
