@@ -272,7 +272,6 @@ impl BrowserWindow {
         self.show_network_info_bar();
         self.update_properties_actions();
         self.sidebar().select(uri);
-        self.follow_with_folder_tree();
         self.render_landing();
         self.show_surface_for(uri);
         self.picker_selection_changed();

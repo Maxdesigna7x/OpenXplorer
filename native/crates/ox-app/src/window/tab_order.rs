@@ -57,7 +57,6 @@ pub(super) enum Stop {
     Search,
     Commands,
     Places,
-    FolderTree,
     SidebarResizer,
     NetworkInfoBar,
     SearchStrip,
@@ -74,12 +73,11 @@ pub(super) enum Stop {
 
 impl Stop {
     /// Every stop, in Tab's order.
-    pub(super) const ALL: [Stop; 18] = [
+    pub(super) const ALL: [Stop; 17] = [
         Stop::Address,
         Stop::Search,
         Stop::Commands,
         Stop::Places,
-        Stop::FolderTree,
         Stop::SidebarResizer,
         Stop::NetworkInfoBar,
         Stop::SearchStrip,
@@ -258,7 +256,6 @@ impl BrowserWindow {
             Stop::Search => self.search_box().clone().upcast(),
             Stop::Commands => self.command_bar().clone().upcast(),
             Stop::Places => self.sidebar().list().clone().upcast(),
-            Stop::FolderTree => self.sidebar().folder_tree().clone().upcast(),
             Stop::SidebarResizer => self.sidebar_resizer().clone().upcast(),
             Stop::NetworkInfoBar => self.network_info_bar().clone().upcast(),
             Stop::SearchStrip => self.search_strip().clone().upcast(),
@@ -279,7 +276,7 @@ impl BrowserWindow {
     /// and a list of files, as in Windows.
     fn stop_is_single(&self, stop: Stop) -> bool {
         match stop {
-            Stop::Places | Stop::FolderTree => true,
+            Stop::Places => true,
             Stop::Pane(side) => self.pane_on(side).lists_items(),
             _ => false,
         }
@@ -309,7 +306,6 @@ impl BrowserWindow {
                     None => list.child_focus(gtk::DirectionType::TabForward),
                 }
             }
-            Stop::FolderTree => self.folder_tree().focus_selected(),
             // The tab in front, the strip's one stop (ACC-008), before its
             // Close button; GTK would go to the button first.
             Stop::Tabs => {

@@ -63,6 +63,7 @@
 .sidebar .side-entry { padding: 0 11px 0 19px; }
 /* Rows inside This PC and Network (.side-entry.indent). */
 .sidebar list.places > row.indent .side-entry { padding-left: 35px; }
+.sidebar list.places > row.branch .side-entry { padding-left: 21px; }
 /* The dashed tail of an empty Quick access sits 7px further in (6px
    margin, 1px border), so its glyph takes the same column. */
 .sidebar list.places > row.quick-drop-tail .side-entry { padding-left: 28px; }
@@ -107,34 +108,6 @@ window.ox.compact-density .sidebar button.side-eject { min-height: 20px; }
    Explorer's navigation-pane tree: 30px rows with the places' hover,
    selection and focus, a 16px chevron that turns down when open, and
    a line like the footer's between the places and the tree. */
-.sidebar paned > separator { min-height: 1px; margin: 0 7px; background-color: @ox_border; }
-.folder-tree listview { background: none; padding: 6px 7px 0 7px; color: @ox_text; }
-.folder-tree listview > row {
-  min-height: 30px;
-  border-radius: 4px;
-  padding: 0 6px;
-  background: none;
-  outline: none;
-  transition: background-color 83ms linear;
-}
-/* Compact view (VIEW-067, window/compact_density.rs): closer folder tree rows. */
-window.compact-density .folder-tree listview > row { min-height: 24px; }
-.folder-tree listview > row:hover { background-color: @ox_item_hover; }
-.folder-tree listview > row:selected { background-color: @ox_item_selected; color: @ox_text; }
-.folder-tree listview > row:focus-visible,
-.folder-tree treeexpander:focus-visible {
-  outline: 2px solid @ox_item_focus_outer;
-  outline-offset: -2px;
-  box-shadow: inset 0 0 0 3px @ox_item_focus_inner;
-}
-.folder-tree treeexpander expander {
-  min-width: 16px;
-  min-height: 16px;
-  margin-right: 4px;
-  color: @ox_muted;
-  -gtk-icon-source: -gtk-icontheme("ox-chevron-right-16-symbolic");
-}
-.folder-tree treeexpander expander:checked { -gtk-icon-source: -gtk-icontheme("ox-chevron-down-16-symbolic"); }
 
 /* A hidden place or section listed by "Show all entries" (SIDE-010), half
    see-through as in Dolphin's Places panel. */
@@ -170,14 +143,11 @@ paned.workspace > separator.keyboard-focus {
    then fade in. Hidden arrows keep their room, so nothing moves. Without
    animations GTK skips the fade. The file list's folder arrows are the
    Expandable folders switch's. */
-window.hide-expand-arrows .sidebar .side-expander,
-window.hide-expand-arrows .sidebar .folder-tree treeexpander expander {
+window.hide-expand-arrows .sidebar .side-expander {
   opacity: 0;
   transition: opacity 150ms ease-out;
 }
 window.hide-expand-arrows .sidebar:hover .side-expander,
-window.hide-expand-arrows .sidebar:hover .folder-tree treeexpander expander,
-window.hide-expand-arrows .sidebar:focus-within .side-expander,
-window.hide-expand-arrows .sidebar:focus-within .folder-tree treeexpander expander {
+window.hide-expand-arrows .sidebar:focus-within .side-expander {
   opacity: 1;
 }

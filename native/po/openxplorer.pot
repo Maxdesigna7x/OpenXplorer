@@ -2011,7 +2011,7 @@ msgstr ""
 msgid "Opens with"
 msgstr ""
 
-#: crates/ox-app/resources/manual.md crates/ox-app/resources/ui/details-pane.ui crates/ox-app/src/properties/general_tab.rs crates/ox-app/src/window/command_bar/menus.rs crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/home_page.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/shortcuts_window.rs crates/ox-app/src/window/sidebar/menu.rs
+#: crates/ox-app/resources/manual.md crates/ox-app/resources/ui/details-pane.ui crates/ox-app/src/properties/general_tab.rs crates/ox-app/src/window/command_bar/menus.rs crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/home_page.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/shortcuts_window.rs crates/ox-app/src/window/sidebar/menu.rs
 msgid "Properties"
 msgstr ""
 
@@ -4872,7 +4872,7 @@ msgstr ""
 msgid "Close search"
 msgstr ""
 
-#: crates/ox-app/src/window/command_bar.rs crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/shortcuts_window.rs crates/ox-core/src/ops/undo.rs
+#: crates/ox-app/src/window/command_bar.rs crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/shortcuts_window.rs crates/ox-core/src/ops/undo.rs
 msgid "Copy"
 msgstr ""
 
@@ -4880,7 +4880,7 @@ msgstr ""
 msgid "Copy (Ctrl+C)"
 msgstr ""
 
-#: crates/ox-app/src/window/command_bar.rs crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/shortcuts_window.rs
+#: crates/ox-app/src/window/command_bar.rs crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/shortcuts_window.rs
 msgid "Cut"
 msgstr ""
 
@@ -4888,7 +4888,7 @@ msgstr ""
 msgid "Cut (Ctrl+X)"
 msgstr ""
 
-#: crates/ox-app/src/window/command_bar.rs crates/ox-app/src/window/file_ops/delete_label.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/shortcuts_window.rs crates/ox-core/src/ops/undo.rs
+#: crates/ox-app/src/window/command_bar.rs crates/ox-app/src/window/file_ops/delete_label.rs crates/ox-app/src/window/shortcuts_window.rs crates/ox-core/src/ops/undo.rs
 msgid "Delete"
 msgstr ""
 
@@ -4912,7 +4912,7 @@ msgstr ""
 msgid "New"
 msgstr ""
 
-#: crates/ox-app/src/window/command_bar.rs crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/shortcuts_window.rs
+#: crates/ox-app/src/window/command_bar.rs crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/shortcuts_window.rs
 msgid "Paste"
 msgstr ""
 
@@ -5009,7 +5009,7 @@ msgstr ""
 msgid "File name extensions"
 msgstr ""
 
-#: crates/ox-app/src/window/command_bar/menus.rs crates/ox-app/src/window/folder_tree.rs crates/ox-app/src/window/shortcuts_window.rs
+#: crates/ox-app/src/window/command_bar/menus.rs crates/ox-app/src/window/shortcuts_window.rs
 msgid "Folder tree"
 msgstr ""
 
@@ -5271,7 +5271,7 @@ msgstr ""
 msgid "Copy as path"
 msgstr ""
 
-#: crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/file_ops/delete_label.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/shortcuts_window.rs
+#: crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/file_ops/delete_label.rs crates/ox-app/src/window/shortcuts_window.rs
 msgid "Delete permanently"
 msgstr ""
 
@@ -5311,11 +5311,11 @@ msgstr ""
 msgid "Open folder with…"
 msgstr ""
 
-#: crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/sidebar/menu.rs
+#: crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/sidebar/menu.rs
 msgid "Open in Terminal"
 msgstr ""
 
-#: crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/sidebar/menu.rs
+#: crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/sidebar/menu.rs
 msgid "Open in new tab"
 msgstr ""
 
@@ -5323,7 +5323,7 @@ msgstr ""
 msgid "Open in new tabs"
 msgstr ""
 
-#: crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/folder_tree/menu.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/sidebar/menu.rs
+#: crates/ox-app/src/window/context_menu/entries.rs crates/ox-app/src/window/place_menus.rs crates/ox-app/src/window/sidebar/menu.rs
 msgid "Open in new window"
 msgstr ""
 
@@ -6375,22 +6375,6 @@ msgstr ""
 
 #: crates/ox-app/src/window/folder_size_scan.rs
 msgid "Select a folder or share to calculate its size."
-msgstr ""
-
-#: crates/ox-app/src/window/folder_tree/menu.rs
-msgid "Limit to home folder"
-msgstr ""
-
-#: crates/ox-app/src/window/folder_tree/menu.rs
-msgid "Rename…"
-msgstr ""
-
-#: crates/ox-app/src/window/folder_tree/menu.rs
-msgid "Scroll to the folder shown"
-msgstr ""
-
-#: crates/ox-app/src/window/folder_tree/menu.rs
-msgid "Show hidden folders"
 msgstr ""
 
 #: crates/ox-app/src/window/group_headings.rs

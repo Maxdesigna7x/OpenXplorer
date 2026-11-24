@@ -278,7 +278,7 @@ impl BrowserWindow {
 
     /// In a Flatpak, Local Disk leads to the user's real home directory
     /// instead of navigating the sandbox's private root.
-    fn flatpak_root_destination(&self, uri: String) -> String {
+    pub(super) fn flatpak_root_destination(&self, uri: String) -> String {
         if uri == "file:///"
             && !self.is_picking()
             && self.context().desktop_integration().sandbox().is_flatpak()
@@ -561,8 +561,7 @@ impl BrowserWindow {
             return;
         }
         self.context().reload_settings();
-        self.folder_tree().invalidate();
-        self.follow_with_folder_tree();
+        self.sidebar().refresh_branches();
         self.save_selection();
         let active = self.imp().session.borrow().active_id();
         if let Some(id) = active {

@@ -188,14 +188,8 @@ fn ctrl_z_undoes_from_the_tree_and_a_split_pane_but_not_in_a_text_field() {
     let taken_from_search = ctrl_z();
     settle();
     let kept = fixture.path("Plans.txt").is_file();
-    // The fixture's temporary folder plays the home folder, so the tree
-    // never lists the real disk.
-    test.window.imp().locations.borrow_mut().home = fixture.root().parent().map(Into::into);
-    test.window.follow_with_folder_tree();
-    let tree = test.window.folder_tree();
-    wait_until("the tree to list the folder", || tree.selected_uri().is_some());
-    let tree_list = descendants::<gtk::ListView>(tree).remove(0);
-    assert!(tree_list.grab_focus(), "the tree takes focus");
+    let tree = test.window.sidebar();
+    assert!(tree.reveal_location(), "the navigation pane takes focus");
     let taken_from_tree = ctrl_z();
     wait_until("the rename to be undone", || {
         fixture.path("Notes 2.txt").is_file()

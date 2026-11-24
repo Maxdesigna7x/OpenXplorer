@@ -60,7 +60,10 @@ fn drive_tile(test: &TestWindow, name: &str) -> (gtk::FlowBox, gtk::FlowBoxChild
 /// The first group header This PC shows.
 fn first_header(test: &TestWindow) -> gtk::Button {
     let headers = landing::group_headers(test.window.folder_pane().landing());
-    headers.into_iter().next().expect("This PC heads its groups")
+    headers
+        .into_iter()
+        .find(|header| header.has_css_class("drives-header"))
+        .expect("This PC heads its drives")
 }
 
 /// Emits `key-pressed` with `key` on the key controller of `widget`;
@@ -128,20 +131,40 @@ fn this_pc_shows_pinned_folders_in_a_collapsible_quick_access_group() {
         .contains(&"Example projects".to_owned()));
     assert_eq!(
         landing::section_titles(landing),
-        ["Devices and drives", "Quick access"]
+        ["Quick access", "Devices and drives"]
     );
-    let header = landing::group_headers(landing).remove(1);
+    let header = landing::group_headers(landing).remove(0);
     let (pins, _) = drive_tile(&test, "Example projects");
+    assert!(!pins.is_visible(), "Quick access is collapsed by default");
     header.emit_clicked();
-    assert!(!pins.is_visible());
-    test.window.render_places();
-    let (pins, _) = drive_tile(&test, "Example projects");
-    assert!(!pins.is_visible(), "a redraw keeps the group closed");
-    landing::group_headers(landing).remove(1).emit_clicked();
     assert!(pins.is_visible());
+    wait_until("the expanded state is saved", || {
+        ox_core::settings::Settings::open(test.settings_directory())
+            .snapshot()
+            .preferences
+            .home_folded
+            .iter()
+            .any(|key| key == landing::QUICK_ACCESS_EXPANDED)
+    });
+    let reopened = test.open_beside(Page::ThisPc.uri());
+    let (pins, _) = drive_tile(&reopened, "Example projects");
+    assert!(pins.is_visible());
+    landing::group_headers(reopened.window.folder_pane().landing())
+        .remove(0)
+        .emit_clicked();
+    wait_until("the collapsed state is saved", || {
+        !ox_core::settings::Settings::open(test.settings_directory())
+            .snapshot()
+            .preferences
+            .home_folded
+            .iter()
+            .any(|key| key == landing::QUICK_ACCESS_EXPANDED)
+    });
+    let reopened = reopened.open_beside(Page::ThisPc.uri());
+    assert!(!drive_tile(&reopened, "Example projects").0.is_visible());
     test.save_share("smb://nas/media", "Media (M:)");
     wait_until("the Network locations group", || {
-        landing::section_titles(landing) == ["Devices and drives", "Quick access", "Network locations"]
+        landing::section_titles(landing) == ["Quick access", "Devices and drives", "Network locations"]
     });
     assert_eq!(test.window.status_bar().texts().0, "Ready");
     assert!(test.window.search_box().is_sensitive(), "Search");
@@ -169,10 +192,10 @@ fn google_drive_is_listed_below_the_local_drives() {
     test.window.render_places();
     let landing = test.window.folder_pane().landing();
     let titles = landing::section_titles(landing);
-    assert_eq!(titles.first().map(String::as_str), Some("Devices and drives"));
+    assert!(titles.iter().any(|title| title == "Devices and drives"));
     assert_eq!(titles.last().map(String::as_str), Some("Network locations"));
     let groups = landing::tile_groups(landing);
-    assert_eq!(groups[0].1.len(), 3);
+    assert_eq!(drive_tile(&test, "Local Disk").0.observe_children().n_items(), 3);
     let network_tiles = &groups.last().expect("the Network group").1;
     assert_eq!(network_tiles.len(), 1);
     assert_eq!(texts_in(&network_tiles[0])[0], "Google Drive");
@@ -341,9 +364,10 @@ fn select_all_none_and_invert_act_on_the_tiles_of_both_groups() {
     });
     let media = "Media (\\\\nas) (M:)";
     let pins = test.window.places().quick_access;
-    let every: Vec<&str> = ["Local Disk", "Backup", "USB"]
-        .into_iter()
-        .chain(pins.iter().map(|place| place.label.as_str()))
+    let every: Vec<&str> = pins
+        .iter()
+        .map(|place| place.label.as_str())
+        .chain(["Local Disk", "Backup", "USB"])
         .chain([media])
         .collect();
     let inverted: Vec<&str> = every.iter().copied().filter(|name| *name != "Backup").collect();

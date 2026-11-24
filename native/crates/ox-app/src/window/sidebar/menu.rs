@@ -325,7 +325,7 @@ impl Sidebar {
         let window = self.root().and_downcast::<BrowserWindow>();
         let own_pin = entry.pinned && window.as_ref().is_some_and(|window| is_own_pin(window, uri));
         let share_root = is_smb_share_root(uri);
-        let changeable = own_pin && !share_root;
+        let changeable = (own_pin || matches!(entry.level, RowLevel::Descendant(_))) && !share_root;
         let can_paste = window.as_ref().is_some_and(|window| window.can_paste_into(uri));
         // Windows 11 shows only what the folder allows: a standard folder
         // such as Downloads has Copy alone, and Paste shows only while
@@ -416,6 +416,37 @@ impl Sidebar {
             let caching = window.as_ref().and_then(|window| window.caching_of(uri));
             let editable = window.is_some_and(|window| is_own_pin(&window, uri));
             return Some(pin_menu(uri, caching, editable));
+        }
+        if let (RowLevel::Descendant(_), RowTarget::Location(uri)) = (entry.level, &entry.target) {
+            let target = |label, glyph, action| {
+                MenuItem::with_text_target(&ox_core::i18n::gettext(label), glyph, action, uri).into()
+            };
+            let options = self.branch_options();
+            let option = |label, key: &str, checked| {
+                let item = MenuItem::with_text_target(
+                    &ox_core::i18n::gettext(label),
+                    Icon::Eye,
+                    WindowAction::FolderTreeOption,
+                    key,
+                );
+                MenuEntry::Item(MenuItem {
+                    check: super::super::menu_popover::ItemCheck::Fixed(checked),
+                    ..item
+                })
+            };
+            return Some(vec![
+                target("Open in new tab", Icon::Add, WindowAction::OpenTab),
+                target("Open in new window", Icon::WindowNew, WindowAction::OpenWindow),
+                target(
+                    "Open in Terminal",
+                    Icon::WindowConsole,
+                    WindowAction::OpenInTerminalOf,
+                ),
+                target("Properties", Icon::Info, WindowAction::PropertiesOf),
+                MenuEntry::Divider,
+                option("Show hidden folders", "show-hidden", options.show_hidden),
+                option("Scroll to the folder shown", "auto-scroll", options.auto_scroll),
+            ]);
         }
         if entry.level == RowLevel::Group {
             if let RowTarget::Location(uri) = &entry.target {
@@ -548,7 +579,7 @@ fn hide_place_item(entry: &SidebarEntry) -> Option<MenuEntry> {
     let RowTarget::Location(uri) = &entry.target else {
         return None;
     };
-    if entry.pinned || entry.level == RowLevel::Group {
+    if entry.pinned || matches!(entry.level, RowLevel::Group | RowLevel::Descendant(_)) {
         return None;
     }
     Some(

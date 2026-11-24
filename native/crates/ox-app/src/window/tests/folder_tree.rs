@@ -1,53 +1,66 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! The folder tree in the navigation pane (SIDE-028).
-
-use std::fs;
+//! Mounted drive folders in the navigation pane.
 
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-use ox_core::location::{file_uri, same_location};
+use ox_core::location::file_uri;
 
-use crate::test_support::harness::{wait_until, Fixture, TestWindow};
+use super::sidebar::{row_named, section_chevron};
+use crate::test_support::harness::{descendants, wait_until, Fixture, TestWindow};
+use crate::test_support::mounted_volume;
+use crate::volumes::VolumeKind;
+
+pub(super) fn open_with_drive(fixture: &Fixture) -> TestWindow {
+    let test = TestWindow::open(ox_core::location::PC_URI);
+    test.window.imp().volumes.replace(vec![mounted_volume(
+        "Fixture drive",
+        &fixture.uri(),
+        VolumeKind::Drive,
+    )]);
+    test.window.render_places();
+    test
+}
 
 /// parity: SIDE-028
 #[gtk::test]
-fn the_folder_tree_opens_down_to_the_folder_shown_and_opens_the_folder_clicked() {
+fn drive_folders_expand_in_the_same_sidebar_list() {
     let fixture = Fixture::standard();
-    let reports = fixture.path("Documents").join("Reports");
-    fs::create_dir(&reports).expect("fixture subfolder");
-    fs::create_dir(fixture.path(".cache")).expect("hidden fixture folder");
-    let test = TestWindow::open(&file_uri(&reports));
-    // The fixture's temporary folder plays the home folder, so the tree
-    // starts there and never lists the real disk.
-    test.window.imp().locations.borrow_mut().home = fixture.root().parent().map(Into::into);
+    std::fs::create_dir(fixture.path("Documents/Reports")).unwrap();
+    let test = open_with_drive(&fixture);
+    let sidebar = test.window.sidebar();
+    assert!(descendants::<gtk::Paned>(sidebar).is_empty());
 
-    test.window.follow_with_folder_tree();
-    let tree = test.window.folder_tree();
-    let reports = file_uri(&reports);
-    wait_until("the tree selects the folder shown", || {
-        tree.selected_uri()
-            .is_some_and(|uri| same_location(&uri, &reports))
+    section_chevron(&test, "Fixture drive").emit_clicked();
+    wait_until("the drive's folders", || {
+        let labels = sidebar.labels();
+        labels
+            .iter()
+            .position(|label| label == "Fixture drive")
+            .is_some_and(|drive| labels.get(drive + 1).is_some_and(|label| label == "Documents"))
+    });
+    let drive = row_named(&test, "Fixture drive");
+    let mut next = drive.index() + 1;
+    // Known folders may share a name with folders on the fixture drive.
+    let folders = sidebar.labels();
+    while folders[next as usize] != "Documents" {
+        next += 1;
+        assert!(next < folders.len() as i32);
+    }
+    let documents = sidebar.list().row_at_index(next).unwrap();
+    assert!(documents.has_css_class("branch"));
+    documents.activate();
+    wait_until("navigation to Documents", || {
+        test.window.current_uri().as_deref() == Some(fixture.uri_of("Documents").as_str())
+    });
+    wait_until("the new folder's branch", || {
+        sidebar.labels().contains(&"Reports".to_owned())
+    });
+    row_named(&test, "Reports").activate();
+    wait_until("navigation to Reports", || {
+        test.window.current_uri().as_deref() == Some(file_uri(&fixture.path("Documents/Reports")).as_str())
     });
 
-    assert!(tree.is_visible());
-    assert_eq!(
-        tree.outline(),
-        ["Home", "  Example projects", "    Documents", "      Reports"],
-        "only folders, no hidden one, each opened only on the way"
-    );
-    let new_folder = fixture.path("Documents/New folder");
-    fs::create_dir(&new_folder).expect("a new fixture folder");
-    let new_uri = file_uri(&new_folder);
-    test.window.navigate(&new_uri).expect("the new folder opens");
-    wait_until("the tree to find the new folder", || {
-        tree.selected_uri()
-            .is_some_and(|uri| same_location(&uri, &new_uri))
-    });
-
-    tree.activate_row(1);
-    wait_until("the clicked folder opens", || {
-        test.window
-            .current_uri()
-            .is_some_and(|uri| same_location(&uri, &fixture.uri()))
-    });
+    section_chevron(&test, "Fixture drive").emit_clicked();
+    assert!(!sidebar.labels().contains(&"Reports".to_owned()));
+    assert!(row_named(&test, "Fixture drive").is_selected());
 }

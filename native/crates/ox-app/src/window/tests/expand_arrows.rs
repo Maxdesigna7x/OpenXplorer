@@ -7,8 +7,7 @@
 use std::fs;
 
 use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use ox_core::location::{file_uri, same_location};
+use ox_core::location::file_uri;
 use ox_core::settings::{PreferencesUpdate, Settings};
 
 use super::panes_layout::save_expandable_folders;
@@ -28,16 +27,6 @@ fn save_arrows_hidden(test: &TestWindow, hidden: bool) {
 }
 
 /// Whether `widget` sits inside a widget with the CSS class `class`.
-fn inside_class(widget: &gtk::Widget, class: &str) -> bool {
-    let mut parent = widget.parent();
-    while let Some(widget) = parent {
-        if widget.has_css_class(class) {
-            return true;
-        }
-        parent = widget.parent();
-    }
-    false
-}
 
 /// A window on Documents/Reports with the folder tree shown, so every
 /// kind of arrow is on screen.
@@ -45,17 +34,14 @@ fn window_with_every_arrow(fixture: &Fixture) -> TestWindow {
     let reports = fixture.path("Documents").join("Reports");
     fs::create_dir(&reports).expect("fixture subfolder");
     fs::create_dir(reports.join("2026")).expect("a folder to expand");
-    let test = TestWindow::open(&file_uri(&reports));
+    let test = super::folder_tree::open_with_drive(fixture);
+    test.window
+        .navigate(&file_uri(&reports))
+        .expect("the fixture folder");
     // The file list's folder arrows, which are off by default.
     save_expandable_folders(&test, true);
-    test.window.imp().locations.borrow_mut().home = fixture.root().parent().map(Into::into);
-    test.window.follow_with_folder_tree();
-    let reports = file_uri(&reports);
-    wait_until("the tree selects the folder shown", || {
-        test.window
-            .folder_tree()
-            .selected_uri()
-            .is_some_and(|uri| same_location(&uri, &reports))
+    wait_until("the tree expands the folder shown", || {
+        test.window.sidebar().labels().contains(&"2026".to_owned())
     });
     wait_for_frames(&test.window, 3);
     test
@@ -75,15 +61,7 @@ fn draws(widget: &gtk::Widget) -> bool {
 fn navigation_arrows(test: &TestWindow) -> Vec<gtk::Widget> {
     descendants::<gtk::Widget>(test.window.sidebar())
         .into_iter()
-        .filter(|widget| {
-            let chevron = widget.has_css_class("side-expander");
-            let tree_arrow = widget.css_name() == "expander"
-                && widget
-                    .parent()
-                    .is_some_and(|parent| parent.css_name() == "treeexpander")
-                && inside_class(widget, "folder-tree");
-            chevron || tree_arrow
-        })
+        .filter(|widget| widget.has_css_class("side-expander"))
         .filter(WidgetExt::is_mapped)
         .collect()
 }
@@ -114,8 +92,7 @@ fn hidden_navigation_arrows_show_with_focus_in_the_pane() {
         .iter()
         .filter(|widget| widget.has_css_class("side-expander"))
         .count();
-    assert_eq!(chevrons, 3, "Quick access, This PC and Network");
-    assert!(arrows.len() > chevrons, "the folder tree draws arrows");
+    assert!(chevrons > 3, "the groups and the branches draw arrows");
     assert!(arrows.iter().all(draws), "shown by default");
 
     test.window.folder_pane().grab_focus();
