@@ -293,7 +293,7 @@ impl Zoom {
         let mask = gtk::Snapshot::new();
         for tile in &after {
             if let Some(rect) = tile.rect.intersection(&viewport) {
-                mask.append_color(&gdk::RGBA::WHITE, &rect);
+                mask.append_node(gsk::ColorNode::new(&gdk::RGBA::WHITE, &rect));
             }
         }
         let masked = gsk::MaskNode::new(base, mask.to_node()?, gsk::MaskMode::InvertedAlpha);
@@ -303,7 +303,7 @@ impl Zoom {
             reason = "GTK 4.14 looks up the theme's named background this way"
         )]
         if let Some(background) = pane.style_context().lookup_color("ox_bg") {
-            backdrop.append_color(&background, &viewport);
+            backdrop.append_node(gsk::ColorNode::new(&background, &viewport));
         }
         backdrop.append_node(masked);
         let backdrop = backdrop.to_node()?;
