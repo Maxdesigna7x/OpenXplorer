@@ -317,3 +317,9 @@ checkbutton.theme-radio:focus-visible > radio { box-shadow: 0 0 0 2px @ox_focus_
 .settings.narrow .theme-preview .preview-accent-line { margin-right: 50px; }
 .settings.narrow .theme-preview .preview-line { margin-right: 18px; }
 .settings.narrow .theme-preview .preview-short-line { margin-right: 34px; }
+
+.settings.compact-window .settings-navigation { min-width: 132px; padding: 8px 6px 4px; }
+.settings.compact-window list.settings-categories { margin-top: 6px; }
+.settings.compact-window list.settings-categories > row { min-height: 30px; padding-right: 4px; }
+.settings.compact-window .settings-content { padding: 10px 12px; }
+.settings.compact-window .settings-no-matches { margin: 12px; }

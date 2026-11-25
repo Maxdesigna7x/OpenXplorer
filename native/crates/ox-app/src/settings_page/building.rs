@@ -96,10 +96,7 @@ impl SettingsPage {
     fn add_named_page(&self, name: &str, section: &SettingsSection) -> gtk::Box {
         let content = gtk::Box::builder().css_classes(["settings-content"]).build();
         content.append(section);
-        let scrolled = gtk::ScrolledWindow::builder()
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .child(&content)
-            .build();
+        let scrolled = gtk::ScrolledWindow::builder().child(&content).build();
         self.imp().pages.add_named(&scrolled, Some(name));
         content
     }

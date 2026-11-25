@@ -7207,11 +7207,15 @@ msgid "Resize sidebar"
 msgstr ""
 
 #: crates/ox-app/src/window/sidebar_toggle.rs
+msgid "Hide navigation pane (F9)"
+msgstr ""
+
+#: crates/ox-app/src/window/sidebar_toggle.rs
 msgid "Places"
 msgstr ""
 
 #: crates/ox-app/src/window/sidebar_toggle.rs
-msgid "Toggle navigation pane (F9)"
+msgid "Show navigation pane (F9)"
 msgstr ""
 
 #: crates/ox-app/src/window/software_search.rs

@@ -387,4 +387,10 @@ impl SettingsPage {
             PageWidth::Narrow => self.add_css_class(NARROW_CLASS),
         }
     }
+
+    /// Leaves room for a scrollable category list at the minimum window size.
+    pub(crate) fn set_compact_controls(&self, compact: bool) {
+        crate::window::widget_tree::toggle_class(self, "compact-window", compact);
+        self.imp().subtitle.set_visible(!compact);
+    }
 }

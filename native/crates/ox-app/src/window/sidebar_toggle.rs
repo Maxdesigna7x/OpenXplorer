@@ -24,8 +24,7 @@ impl BrowserWindow {
     pub(super) fn install_sidebar_toggle(&self) {
         let imp = self.imp();
         let toggle = gtk::ToggleButton::builder()
-            .child(&icons::image(Icon::PanelLeft, PLACES_GLYPH))
-            .tooltip_text(ox_core::i18n::gettext("Toggle navigation pane (F9)"))
+            .child(&icons::image(Icon::ChevronLeft16, PLACES_GLYPH))
             .valign(gtk::Align::Center)
             .css_classes(["nav-sidebar-toggle"])
             .build();
@@ -83,6 +82,21 @@ impl BrowserWindow {
         if let Some(button) = imp.places_button.get() {
             button.set_visible(!shown);
             if let Some(toggle) = imp.sidebar_toggle.get() {
+                let (glyph, tooltip) = if shown {
+                    (
+                        Icon::ChevronLeft16,
+                        ox_core::i18n::gettext("Hide navigation pane (F9)"),
+                    )
+                } else {
+                    (
+                        Icon::ChevronRight16,
+                        ox_core::i18n::gettext("Show navigation pane (F9)"),
+                    )
+                };
+                if let Some(image) = toggle.child().and_downcast::<gtk::Image>() {
+                    icons::set_icon(&image, glyph, PLACES_GLYPH);
+                }
+                toggle.set_tooltip_text(Some(&tooltip));
                 if !room && focus.as_ref() == Some(toggle.upcast_ref()) {
                     button.grab_focus();
                 }

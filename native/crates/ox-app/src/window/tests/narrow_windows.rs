@@ -24,7 +24,12 @@ fn the_sidebar_hides_for_width_and_the_button_keeps_the_manual_choice() {
     let test = laid_out(&fixture.uri());
     let window = &test.window;
     let toggle = window.imp().sidebar_toggle.get().expect("the navigation toggle");
+    let glyph = toggle
+        .child()
+        .and_downcast::<gtk::Image>()
+        .expect("the navigation glyph");
     assert!(window.sidebar().is_visible() && toggle.is_visible());
+    assert_eq!(glyph.icon_name().as_deref(), Some("ox-chevron-left-16-symbolic"));
 
     resize(&test, 650);
     assert!(!window.sidebar().is_visible());
@@ -40,6 +45,7 @@ fn the_sidebar_hides_for_width_and_the_button_keeps_the_manual_choice() {
 
     toggle.emit_clicked();
     assert!(!window.sidebar().is_visible());
+    assert_eq!(glyph.icon_name().as_deref(), Some("ox-chevron-right-16-symbolic"));
     assert!(toggle.is_visible());
     resize(&test, 650);
     resize(&test, 900);
@@ -49,6 +55,7 @@ fn the_sidebar_hides_for_width_and_the_button_keeps_the_manual_choice() {
     );
     toggle.emit_clicked();
     assert!(window.sidebar().is_visible());
+    assert_eq!(glyph.icon_name().as_deref(), Some("ox-chevron-left-16-symbolic"));
 }
 
 #[gtk::test]

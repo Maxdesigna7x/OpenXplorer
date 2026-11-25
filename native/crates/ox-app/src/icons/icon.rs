@@ -98,12 +98,11 @@ pub(crate) enum Icon {
     /// chevron, a column title's sort arrow, the sidebar's expanders and a
     /// settings drop-down).
     ChevronDown16,
-    /// `chevron_left_16_regular`: the address bar's crumb dividers in a
-    /// right-to-left language (named by `resources/skin/navigation.css`).
-    #[cfg_attr(not(test), expect(dead_code, reason = "only the skin's CSS names it"))]
+    /// `chevron_left_16_regular`: hides the sidebar and divides the
+    /// address bar's crumbs in a right-to-left language.
     ChevronLeft16,
-    /// `chevron_right_16_regular`: a settings row that opens a page of its
-    /// own.
+    /// `chevron_right_16_regular`: reveals the sidebar or opens a
+    /// settings row's own page.
     ChevronRight16,
     /// `chevron_up_16_regular`: the progress window's "Fewer details".
     ChevronUp16,
