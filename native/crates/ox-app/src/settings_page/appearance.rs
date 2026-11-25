@@ -101,6 +101,18 @@ const PANE_WIDTHS: RowText = RowText {
     keywords: "reset layout widths sidebar resize columns",
 };
 
+const ANIMATE_VIEW_ZOOM: RowText = RowText {
+    title: "Animate folder zoom",
+    description: "Smoothly resize the folder view when you hold Ctrl and scroll.",
+    keywords: "wheel icon size motion transition",
+};
+
+const VIEW_ZOOM_DURATION: RowText = RowText {
+    title: "Zoom duration (ms)",
+    description: "How long the folder zoom animation lasts.",
+    keywords: "wheel animation speed milliseconds",
+};
+
 /// The right-click menu styles, as `menuPreferenceControls` offers them.
 const MENU_STYLES: [Choice<ContextMenu>; 2] = [
     Choice {
@@ -415,6 +427,17 @@ fn choose_text_size(page: &SettingsPage, size: TextSize) {
 fn layout_group(page: &SettingsPage) -> SettingsGroup {
     let group = SettingsGroup::new(&ox_core::i18n::gettext("Layout"));
     group.add_row(&super::files_folders::compact_view_row(page));
+    let animate = SettingRow::new(ANIMATE_VIEW_ZOOM);
+    let binding = PreferenceBinding {
+        read: |preferences| preferences.animate_view_zoom,
+        write: |on| PreferencesUpdate {
+            animate_view_zoom: Some(on),
+            ..PreferencesUpdate::default()
+        },
+    };
+    animate.add_control(&page.preference_switch(binding), ControlName::RowTitle);
+    group.add_row(&animate);
+    group.add_row(&zoom_duration_row(page));
     let arrows = SettingRow::new(HIDE_EXPAND_ARROWS);
     let binding = PreferenceBinding {
         read: |preferences| preferences.hide_expand_arrows,
@@ -454,6 +477,34 @@ fn layout_group(page: &SettingsPage) -> SettingsGroup {
     row.add_control(&reset, ControlName::OwnLabel);
     group.add_row(&row);
     group
+}
+
+fn zoom_duration_row(page: &SettingsPage) -> SettingRow {
+    let row = SettingRow::new(VIEW_ZOOM_DURATION);
+    let spin = gtk::SpinButton::with_range(1.0, 500.0, 1.0);
+    spin.set_numeric(true);
+    page.follow_preferences(glib::clone!(
+        #[weak]
+        spin,
+        move |preferences| {
+            spin.set_value(f64::from(preferences.view_zoom_ms));
+            spin.set_sensitive(preferences.animate_view_zoom);
+        }
+    ));
+    spin.connect_value_changed(glib::clone!(
+        #[weak]
+        page,
+        move |spin| {
+            if page.is_user_change() {
+                page.save_preferences(PreferencesUpdate {
+                    view_zoom_ms: u32::try_from(spin.value_as_int()).ok(),
+                    ..PreferencesUpdate::default()
+                });
+            }
+        }
+    ));
+    row.add_control(&spin, ControlName::RowTitle);
+    row
 }
 
 #[cfg(test)]

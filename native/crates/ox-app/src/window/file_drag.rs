@@ -44,7 +44,7 @@ use std::time::{Duration, Instant};
 
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-use gtk::{gdk, gio, glib};
+use gtk::{gdk, gio, glib, graphene};
 use ox_core::entry::Entry;
 use ox_core::network::local_path;
 
@@ -104,6 +104,39 @@ pub(crate) struct OutgoingDrag {
     payload: DragPayload,
     /// The art of the first item, for the drag icon.
     art: Art,
+    /// The view's image of the item the pointer picked up.
+    preview: Option<DragPreview>,
+}
+
+#[derive(Debug, Clone)]
+struct DragPreview {
+    image: gdk::Paintable,
+    hotspot: (i32, i32),
+}
+
+impl DragPreview {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "GTK accepts integer hotspot coordinates"
+    )]
+    fn capture(cell: &gtk::Widget, view: &gtk::Widget, x: f64, y: f64) -> Option<Self> {
+        let (width, height) = (cell.width(), cell.height());
+        if !cell.is_mapped() || width <= 0 || height <= 0 {
+            return None;
+        }
+        let point = view.compute_point(cell, &graphene::Point::new(x as f32, y as f32))?;
+        let hotspot = (
+            (point.x().round() as i32).clamp(0, width - 1),
+            (point.y().round() as i32).clamp(0, height - 1),
+        );
+        let snapshot = gtk::Snapshot::new();
+        let paintable = gtk::WidgetPaintable::new(Some(cell));
+        paintable.snapshot(&snapshot, f64::from(width), f64::from(height));
+        #[expect(clippy::cast_precision_loss, reason = "widget dimensions are small")]
+        let size = graphene::Size::new(width as f32, height as f32);
+        let image = snapshot.to_paintable(Some(&size))?;
+        Some(Self { image, hotspot })
+    }
 }
 
 /// The mouse button a drag of files is made with.
@@ -253,9 +286,15 @@ pub(super) fn drag_actions(
 /// The icon that follows the pointer: the first item's art, with the
 /// number of items beside it when there are several, and under them the
 /// label that says what a release would do ([`label`]).
-fn drag_icon(art: Art, count: usize) -> gtk::Widget {
+fn drag_icon(art: Art, count: usize, preview: Option<&DragPreview>) -> gtk::Widget {
     let pictures = gtk::Box::builder().spacing(4).build();
-    pictures.append(&ArtImage::new(art, DRAG_ICON_SIZE));
+    if let Some(preview) = preview {
+        let picture = gtk::Picture::for_paintable(&preview.image);
+        picture.set_can_shrink(false);
+        pictures.append(&picture);
+    } else {
+        pictures.append(&ArtImage::new(art, DRAG_ICON_SIZE));
+    }
     if count > 1 {
         let badge = gtk::Label::builder()
             .label(ox_core::format::group_digits(count as u64))
@@ -371,8 +410,15 @@ impl BrowserWindow {
                 if button == DragButton::Primary && window.is_blank_space(&view, x, y) {
                     return None;
                 }
-                let position = window.folder_pane().owners().position_at(&view, x, y)?;
+                let owners = window.folder_pane().owners();
+                let position = owners.position_at(&view, x, y)?;
+                let preview = owners
+                    .file_cell_at(position, &view)
+                    .and_then(|cell| DragPreview::capture(cell.upcast_ref(), &view, x, y));
                 let content = window.drag_content_for(position)?;
+                if let Some(drag) = window.imp().outgoing_drag.borrow_mut().as_mut() {
+                    drag.preview = preview;
+                }
                 source.set_actions(drag_actions(&content, button, source.current_event_state()));
                 Some(content)
             }
@@ -488,9 +534,11 @@ impl BrowserWindow {
                 text: String::new(),
                 remote_only: 0,
             };
-            self.imp()
-                .outgoing_drag
-                .replace(Some(OutgoingDrag { payload, art }));
+            self.imp().outgoing_drag.replace(Some(OutgoingDrag {
+                payload,
+                art,
+                preview: None,
+            }));
             return Some(content);
         }
         let prepared = dragged_uris(&entries).and_then(|uris| DragPayload::new(uris, local_path));
@@ -533,9 +581,11 @@ impl BrowserWindow {
         match prepared {
             Ok(payload) => {
                 let content = payload.content();
-                self.imp()
-                    .outgoing_drag
-                    .replace(Some(OutgoingDrag { payload, art }));
+                self.imp().outgoing_drag.replace(Some(OutgoingDrag {
+                    payload,
+                    art,
+                    preview: None,
+                }));
                 Some(content)
             }
             Err(refusal) => {
@@ -552,8 +602,12 @@ impl BrowserWindow {
         let Some(outgoing) = self.show_file_drag_feedback() else {
             return;
         };
-        let icon = drag_icon(outgoing.art, outgoing.payload.uris.len());
+        let preview = outgoing.preview.as_ref();
+        let icon = drag_icon(outgoing.art, outgoing.payload.uris.len(), preview);
         gtk::DragIcon::for_drag(drag).set_child(Some(&icon));
+        if let Some(preview) = preview {
+            drag.set_hotspot(preview.hotspot.0, preview.hotspot.1);
+        }
     }
 
     /// Dims the dragged items, resets type-to-select, pauses clicks and
@@ -704,6 +758,30 @@ mod tests {
         assert_eq!(buttons(test.window.sidebar().list().upcast_ref()), [0]);
     }
 
+    #[gtk::test]
+    fn drag_preview_keeps_the_visible_cells_size_and_grab_point() {
+        let fixture = Fixture::standard();
+        let test = TestWindow::open(&fixture.uri());
+        let pane = test.window.folder_pane();
+        crate::test_support::harness::wait_for_frames(pane, 2);
+        let view = pane.input_widget();
+        let cell = pane.owners().file_cell_at(0, &view).expect("visible name cell");
+        let point = cell
+            .compute_point(&view, &graphene::Point::new(4.0, 6.0))
+            .expect("cell inside view");
+
+        let preview = DragPreview::capture(
+            cell.upcast_ref(),
+            view.upcast_ref(),
+            f64::from(point.x()),
+            f64::from(point.y()),
+        )
+        .expect("the rendered cell");
+        assert_eq!(preview.hotspot, (4, 6));
+        assert_eq!(preview.image.intrinsic_width(), cell.width());
+        assert_eq!(preview.image.intrinsic_height(), cell.height());
+    }
+
     /// parity: DND-001, DND-003, SIDE-016
     #[gtk::test]
     fn a_sidebar_folder_can_be_dragged_and_a_page_cannot() {
@@ -740,6 +818,7 @@ mod tests {
         test.window.imp().outgoing_drag.replace(Some(OutgoingDrag {
             payload,
             art: Art::Folder,
+            preview: None,
         }));
 
         test.window.show_file_drag_feedback();

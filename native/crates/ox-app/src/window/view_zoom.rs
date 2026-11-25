@@ -67,9 +67,18 @@ impl BrowserWindow {
         if zoomed == view {
             return;
         }
+        let preferences = self.context().settings_data().preferences;
+        let animation = if preferences.animate_view_zoom {
+            pane.capture_zoom(view, zoomed, preferences.view_zoom_ms)
+        } else {
+            None
+        };
         let kept = pane.model().first_selected();
         self.set_action_state(WindowAction::View, &zoomed.as_str().to_variant());
         self.show_view(zoomed);
+        if let Some(animation) = animation {
+            pane.animate_zoom(animation);
+        }
         self.remember_style();
         if let Some(position) = kept {
             glib::idle_add_local_once(glib::clone!(

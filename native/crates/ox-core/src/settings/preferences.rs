@@ -287,6 +287,10 @@ pub struct Preferences {
     pub network_interval: u32,
     /// Percent: 80, 90, 100, 110, 125, 150, 175 or 200.
     pub text_size: u32,
+    /// Animate changes made with the folder view's zoom gesture.
+    pub animate_view_zoom: bool,
+    /// Duration of the folder view's zoom animation, in milliseconds.
+    pub view_zoom_ms: u32,
     /// Sidebar width in pixels, once the user resized it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sidebar_width: Option<u32>,
@@ -621,6 +625,8 @@ impl Default for Preferences {
             item_counts_chosen: false,
             network_interval: DEFAULT_NETWORK_INTERVAL,
             text_size: DEFAULT_TEXT_SIZE,
+            animate_view_zoom: true,
+            view_zoom_ms: 100,
             sidebar_width: None,
             column_widths: None,
             window_size: None,
@@ -698,14 +704,20 @@ impl Preferences {
         }
     }
 
-    /// The questions asked before trashing, deleting, emptying the Trash,
-    /// closing several tabs and running programs (SET-010).
-    /// Compact view (VIEW-067), file name extensions (VIEW-069) and the
-    /// Preview pane (VIEW-070).
+    /// The appearance of folder listings, their zoom, and the Preview pane.
     fn apply_names_and_panes(&mut self, update: &PreferencesUpdate) {
         replace_if_some(&mut self.compact_density, update.compact_density);
         replace_if_some(&mut self.show_extensions, update.show_extensions);
         replace_if_some(&mut self.preview_pane, update.preview_pane);
+        replace_if_some(
+            &mut self.text_size,
+            update.text_size.filter(|size| TEXT_SIZES.contains(size)),
+        );
+        replace_if_some(&mut self.animate_view_zoom, update.animate_view_zoom);
+        replace_if_some(
+            &mut self.view_zoom_ms,
+            update.view_zoom_ms.filter(|ms| (1..=500).contains(ms)),
+        );
     }
 
     /// Folder Options' choices that only it sets: how folders open, the
@@ -808,7 +820,6 @@ impl Preferences {
     /// exactly like `update_preferences` in the Python app. A present
     /// `column_widths` replaces all saved column widths.
     pub fn apply(&mut self, update: &PreferencesUpdate) {
-        let text_size = update.text_size.filter(|size| TEXT_SIZES.contains(size));
         let network_interval = update
             .network_interval
             .filter(|interval| NETWORK_INTERVALS.contains(interval));
@@ -835,7 +846,6 @@ impl Preferences {
             self.classic_menu_chosen = menu == ContextMenu::Win10;
         }
         replace_if_some(&mut self.network_interval, network_interval);
-        replace_if_some(&mut self.text_size, text_size);
         replace_if_some(&mut self.show_full_path, update.show_full_path);
         replace_if_some(&mut self.editable_location, update.editable_location);
         replace_if_some(
@@ -1008,6 +1018,10 @@ pub struct PreferencesUpdate {
     pub auto_index: Option<bool>,
     /// New text size in percent.
     pub text_size: Option<u32>,
+    /// Enable or disable the folder view's zoom animation.
+    pub animate_view_zoom: Option<bool>,
+    /// New folder zoom animation duration in milliseconds (1–500).
+    pub view_zoom_ms: Option<u32>,
     /// New sidebar width in pixels; rounded when saved.
     pub sidebar_width: Option<f64>,
     /// Replaces all column widths; an empty list resets them.
@@ -1187,6 +1201,11 @@ impl PreferencesUpdate {
             show_hidden: flag("showHidden"),
             auto_index: flag("autoIndex"),
             text_size: values.get("textSize").and_then(read_text_size),
+            animate_view_zoom: flag("animateViewZoom"),
+            view_zoom_ms: values
+                .get("viewZoomMs")
+                .and_then(Value::as_u64)
+                .and_then(|ms| u32::try_from(ms).ok()),
             sidebar_width: values.get("sidebarWidth").and_then(Value::as_f64),
             column_widths: values.get("columnWidths").and_then(read_column_widths),
             context_menu: text("contextMenu").and_then(ContextMenu::from_key),

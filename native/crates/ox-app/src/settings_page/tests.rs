@@ -302,7 +302,7 @@ fn the_search_filters_rows_across_every_category() {
         SearchCase {
             typed: "zoom",
             categories: &[Category::Appearance],
-            shown: &["Text size"],
+            shown: &["Text size", "Animate folder zoom", "Zoom duration (ms)"],
         },
         SearchCase {
             typed: "watch live",
@@ -494,29 +494,20 @@ fn escape_leaves_the_search_and_shows_every_row_again() {
     settings
         .page
         .show_view(SettingsView::Category(Category::Appearance));
+    let appearance_rows = settings.shown_rows();
     settings.page.search("zoom");
+    assert_ne!(
+        settings.shown_rows(),
+        appearance_rows,
+        "search hides unrelated rows"
+    );
 
     settings.page.imp().search_entry.emit_stop_search();
 
     assert_eq!(settings.page.imp().search_entry.text(), "");
     assert!(!settings.page.imp().match_count().is_visible());
     assert_eq!(settings.listed_categories(), Category::ALL);
-    assert_eq!(
-        settings.shown_rows(),
-        [
-            "Theme",
-            "Text size",
-            "Use the desktop font",
-            "Compact view",
-            "Hide expand arrows in the sidebar",
-            "Show more items in the navigation pane",
-            "Show more items in the tab menu",
-            "Right-click menu",
-            "Buttons in the right-click menu",
-            "Shift+F10 opens the classic menu",
-            "Sidebar and column widths"
-        ]
-    );
+    assert_eq!(settings.shown_rows(), appearance_rows);
 }
 
 /// A setting of the Python page, by the words that named it there, and
@@ -796,6 +787,29 @@ fn the_compact_view_switch_saves_the_choice() {
     wait_until("the window to follow", || {
         settings.test.window.shows_compact_density()
     });
+}
+
+#[gtk::test]
+fn folder_zoom_controls_save_the_duration_and_disable_animation() {
+    let settings = SettingsTest::open();
+    let animate = switch_of(&settings.row("Animate folder zoom"));
+    let duration = settings
+        .row("Zoom duration (ms)")
+        .controls()
+        .into_iter()
+        .find_map(|widget| widget.downcast::<gtk::SpinButton>().ok())
+        .expect("the duration control");
+    assert!(animate.is_active());
+    assert_eq!(duration.value_as_int(), 100);
+
+    duration.set_value(175.0);
+    wait_until("the zoom duration to be saved", || {
+        settings.saved_preferences().view_zoom_ms == 175
+    });
+    animate.set_active(false);
+    wait_until("zoom animation to be disabled", || !duration.is_sensitive());
+    assert!(!settings.saved_preferences().animate_view_zoom);
+    assert_eq!(settings.saved_preferences().view_zoom_ms, 175);
 }
 
 /// Settings > Search > "Show the search filter bar" is off by default, so

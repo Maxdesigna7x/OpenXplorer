@@ -48,8 +48,12 @@ use crate::picture_guard::{self, Limits};
 use thumbnailers::Catalogue;
 use writer::Source;
 
-/// How many previews are decoded at a time.
-const DECODING_AT_ONCE: usize = 4;
+/// Decoding can use spare cores, with room left for the UI and thumbnail
+/// generators. The upper bound also limits simultaneous decoded images.
+fn decoding_slots() -> usize {
+    let cpus = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    cpus.saturating_sub(2).clamp(1, 6)
+}
 /// How many thumbnails are made at a time.
 const MAKING_AT_ONCE: usize = 2;
 /// How many decoded previews are kept.
@@ -213,7 +217,7 @@ impl PreviewRequest {
 }
 
 thread_local! {
-    static DECODING: Rc<Slots> = Rc::new(Slots::new(DECODING_AT_ONCE));
+    static DECODING: Rc<Slots> = Rc::new(Slots::new(decoding_slots()));
     static MAKING: Rc<Slots> = Rc::new(Slots::new(MAKING_AT_ONCE));
     /// Decoded previews by item, version and size.
     static KEPT: RefCell<HashMap<PreviewKey, gdk::Texture>> = RefCell::new(HashMap::new());
