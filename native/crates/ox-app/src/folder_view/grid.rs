@@ -507,6 +507,9 @@ impl IconView {
     fn fit_lines_to_size(&self) {
         let scroller = &self.imp().scroller;
         for adjustment in [scroller.hadjustment(), scroller.vadjustment()] {
+            adjustment.connect_value_changed(|_| {
+                super::stop_active_video_preview();
+            });
             adjustment.connect_page_size_notify(glib::clone!(
                 #[weak(rename_to = view)]
                 self,

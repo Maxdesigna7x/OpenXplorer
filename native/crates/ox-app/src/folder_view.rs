@@ -36,4 +36,4 @@ pub(crate) mod sorting;
 pub(crate) mod tree;
 pub(crate) mod watch;
 
-pub(crate) use cells::{icon_texture, FolderPicture, CUSTOM_ICON, FOLDER_PICTURE};
+pub(crate) use cells::{icon_texture, stop_active_video_preview, FolderPicture, CUSTOM_ICON, FOLDER_PICTURE};

@@ -72,6 +72,7 @@ impl FileCell {
     /// A lookup still running for the item shown before is dropped.
     pub(crate) fn look_up_picture(&self, item: &FileItem, previews: PreviewPolicy) {
         self.cancel_picture_lookup();
+        self.set_hover_video(item, previews);
         let imp = self.imp();
         imp.folder_picture.show_texture(None);
         let entry = item.entry();
@@ -162,6 +163,7 @@ impl FileCell {
     /// Drops the lookup of a custom icon or preview still running, as for
     /// a row GTK unbinds when it scrolls away.
     pub(crate) fn cancel_picture_lookup(&self) {
+        self.stop_video_hover();
         if let Some(lookup) = self.imp().picture_lookup.take() {
             lookup.abort();
         }
