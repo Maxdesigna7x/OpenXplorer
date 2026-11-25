@@ -435,7 +435,7 @@ impl WidgetImpl for BrowserWindow {
         // Capture while the folder panes still have their previous
         // allocations. Skip internal relayouts at the same window size.
         let animation = if resized && window.is_mapped() && window.settings().is_gtk_enable_animations() {
-            window.context().view_animation_ms().map(|ms| {
+            window.context().resize_animation_ms().map(|ms| {
                 window.folder_panes().map(|pane| {
                     if pane.view() == FolderView::Details {
                         None

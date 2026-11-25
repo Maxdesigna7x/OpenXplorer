@@ -289,7 +289,9 @@ pub struct Preferences {
     pub text_size: u32,
     /// Animate changes made with the folder view's zoom gesture.
     pub animate_view_zoom: bool,
-    /// Duration of the folder view's zoom animation, in milliseconds.
+    /// Animate the folder view when the window resizes.
+    pub animate_window_resize: bool,
+    /// Duration shared by folder zoom and window resize, in milliseconds.
     pub view_zoom_ms: u32,
     /// Sidebar width in pixels, once the user resized it.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -626,6 +628,7 @@ impl Default for Preferences {
             network_interval: DEFAULT_NETWORK_INTERVAL,
             text_size: DEFAULT_TEXT_SIZE,
             animate_view_zoom: true,
+            animate_window_resize: false,
             view_zoom_ms: 100,
             sidebar_width: None,
             column_widths: None,
@@ -714,6 +717,7 @@ impl Preferences {
             update.text_size.filter(|size| TEXT_SIZES.contains(size)),
         );
         replace_if_some(&mut self.animate_view_zoom, update.animate_view_zoom);
+        replace_if_some(&mut self.animate_window_resize, update.animate_window_resize);
         replace_if_some(
             &mut self.view_zoom_ms,
             update.view_zoom_ms.filter(|ms| (1..=500).contains(ms)),
@@ -1020,7 +1024,9 @@ pub struct PreferencesUpdate {
     pub text_size: Option<u32>,
     /// Enable or disable the folder view's zoom animation.
     pub animate_view_zoom: Option<bool>,
-    /// New folder zoom animation duration in milliseconds (1–500).
+    /// Enable or disable animation when the window resizes.
+    pub animate_window_resize: Option<bool>,
+    /// New folder animation duration in milliseconds (1–500).
     pub view_zoom_ms: Option<u32>,
     /// New sidebar width in pixels; rounded when saved.
     pub sidebar_width: Option<f64>,
@@ -1202,6 +1208,7 @@ impl PreferencesUpdate {
             auto_index: flag("autoIndex"),
             text_size: values.get("textSize").and_then(read_text_size),
             animate_view_zoom: flag("animateViewZoom"),
+            animate_window_resize: flag("animateWindowResize"),
             view_zoom_ms: values
                 .get("viewZoomMs")
                 .and_then(Value::as_u64)

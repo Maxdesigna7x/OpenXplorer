@@ -302,7 +302,7 @@ fn the_search_filters_rows_across_every_category() {
         SearchCase {
             typed: "zoom",
             categories: &[Category::Appearance],
-            shown: &["Text size", "Animate folder zoom", "Zoom duration (ms)"],
+            shown: &["Text size", "Animate folder zoom", "Animation duration (ms)"],
         },
         SearchCase {
             typed: "watch live",
@@ -790,25 +790,39 @@ fn the_compact_view_switch_saves_the_choice() {
 }
 
 #[gtk::test]
-fn folder_zoom_controls_save_the_duration_and_disable_animation() {
+fn layout_animation_controls_save_independent_switches_and_a_shared_duration() {
     let settings = SettingsTest::open();
-    let animate = switch_of(&settings.row("Animate folder zoom"));
+    let zoom = switch_of(&settings.row("Animate folder zoom"));
+    let resize = switch_of(&settings.row("Animate window resize"));
     let duration = settings
-        .row("Zoom duration (ms)")
+        .row("Animation duration (ms)")
         .controls()
         .into_iter()
         .find_map(|widget| widget.downcast::<gtk::SpinButton>().ok())
         .expect("the duration control");
-    assert!(animate.is_active());
+    assert!(zoom.is_active());
+    assert!(!resize.is_active());
     assert_eq!(duration.value_as_int(), 100);
 
     duration.set_value(175.0);
     wait_until("the zoom duration to be saved", || {
         settings.saved_preferences().view_zoom_ms == 175
     });
-    animate.set_active(false);
-    wait_until("zoom animation to be disabled", || !duration.is_sensitive());
+    resize.set_active(true);
+    wait_until("resize animation to be saved", || {
+        settings.saved_preferences().animate_window_resize
+    });
+    assert!(settings.saved_preferences().animate_view_zoom);
+    zoom.set_active(false);
+    wait_until("zoom animation to be disabled", || {
+        !settings.saved_preferences().animate_view_zoom
+    });
+    assert!(settings.saved_preferences().animate_window_resize);
+    assert!(duration.is_sensitive(), "resize still uses the duration");
+    resize.set_active(false);
+    wait_until("both animations to be disabled", || !duration.is_sensitive());
     assert!(!settings.saved_preferences().animate_view_zoom);
+    assert!(!settings.saved_preferences().animate_window_resize);
     assert_eq!(settings.saved_preferences().view_zoom_ms, 175);
 }
 

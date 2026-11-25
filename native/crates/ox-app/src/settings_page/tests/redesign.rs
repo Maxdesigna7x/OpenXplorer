@@ -233,7 +233,8 @@ fn every_setting_of_the_earlier_layout_is_on_one_of_the_new_pages() {
         "Corner radius",
         "Blue file selection",
         "Animate folder zoom",
-        "Zoom duration (ms)",
+        "Animate window resize",
+        "Animation duration (ms)",
     ];
     for title in added_since {
         settings.row(title);
