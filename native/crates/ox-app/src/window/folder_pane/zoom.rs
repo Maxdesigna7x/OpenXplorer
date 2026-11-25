@@ -293,10 +293,16 @@ impl Zoom {
             .unwrap_or(first);
         let mut tiles: Vec<_> = after
             .into_iter()
-            .map(|tile| {
-                let from = old
-                    .remove(tile.item.entry().uri.as_str())
-                    .map_or_else(|| tile.offscreen(&viewport, old_first), |old| old.rect);
+            .map(|mut tile| {
+                let from = if let Some(previous) = old.remove(tile.item.entry().uri.as_str()) {
+                    // The destination can still be loading a thumbnail at
+                    // its new size. Move the artwork the user already saw.
+                    tile.image = previous.image.clone();
+                    tile.image_size = previous.image_size;
+                    previous.rect
+                } else {
+                    tile.offscreen(&viewport, old_first)
+                };
                 MovingTile { tile, from }
             })
             .collect();
@@ -384,7 +390,7 @@ mod tests {
             .prepare_reflow(pane, &pane.first_child().expect("folder overlay"))
             .expect("the two real grid layouts");
         animation.progress.set(0.5);
-        let (item, current) = {
+        let (item, current, image) = {
             let moving = reflow
                 .tiles
                 .iter()
@@ -411,13 +417,25 @@ mod tests {
             let midpoint = moving.rect_at(0.5);
             assert_ne!(midpoint, moving.from);
             assert_ne!(midpoint, moving.tile.rect);
-            (moving.tile.item.clone(), moving.rect_at(animation.progress.get()))
+            let original = animation
+                .before
+                .iter()
+                .find(|tile| tile.item == moving.tile.item)
+                .unwrap();
+            assert_eq!(moving.tile.image.as_ptr(), original.image.as_ptr());
+            assert_eq!(moving.tile.image_size, original.image_size);
+            (
+                moving.tile.item.clone(),
+                moving.rect_at(animation.progress.get()),
+                original.image.clone(),
+            )
         };
         animation.reflow.set(reflow).expect("first target");
         pane.animate_zoom(animation);
         let next = pane.capture_zoom(500).expect("the animation is visible");
         let matched = next.before.iter().find(|tile| tile.item == item).unwrap();
         assert_eq!(matched.rect, current);
+        assert_eq!(matched.image.as_ptr(), image.as_ptr());
         pane.stop_zoom_animation();
         settings.set_gtk_enable_animations(false);
         assert!(pane.capture_zoom(500).is_none());
