@@ -2905,6 +2905,14 @@ msgid "Always at the top"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
+msgid "Animate files when you zoom with Ctrl and the wheel or resize the window."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
+msgid "Animate folder zoom"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
 msgid "As in Windows, the navigation pane's arrows (This PC, Network and the folder tree) show only while you point at the pane or move through it with the keyboard."
 msgstr ""
 
@@ -2922,6 +2930,10 @@ msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
 msgid "Hide expand arrows in the sidebar"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
+msgid "How long folder zoom and window resize animations last."
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
@@ -3009,6 +3021,10 @@ msgid "Windows 11 · Compact actions (default)"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
+msgid "Zoom duration (ms)"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
 msgid "appearance dark light system colour color mode"
 msgstr ""
 
@@ -3042,6 +3058,14 @@ msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
 msgid "tab menu right-click move tab new window open windows extra more items windows"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
+msgid "wheel animation speed milliseconds"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
+msgid "wheel icon size motion transition window resize"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs

@@ -23,15 +23,14 @@ use crate::folder_view::sorting::{SortKey, SortName};
 use crate::icons::{Art, Emblems};
 use crate::properties::FolderSizeState;
 
-/// A listed entry with what the views compute from it once, when its
-/// [`FileItem`] is created.
+/// A listed entry with its cached sort keys and presentation.
 #[derive(Debug)]
 struct PreparedEntry {
     name_sort_key: SortKey,
-    type_sort_key: SortKey,
+    type_sort_key: OnceCell<SortKey>,
     lowercase_name: String,
-    art: Art,
-    emblems: Emblems,
+    art: OnceCell<Art>,
+    emblems: OnceCell<Emblems>,
     entry: Entry,
     /// Worked out the first time a search shows the item's folder.
     folder_path: OnceCell<FolderPath>,
@@ -78,10 +77,10 @@ impl PreparedEntry {
     fn new(entry: Entry) -> Self {
         Self {
             name_sort_key: SortKey::new(&entry.name),
-            type_sort_key: SortKey::new(&entry.type_label),
+            type_sort_key: OnceCell::new(),
             lowercase_name: entry.name.to_lowercase(),
-            art: Art::for_entry(&entry),
-            emblems: Emblems::for_entry(&entry),
+            art: OnceCell::new(),
+            emblems: OnceCell::new(),
             entry,
             folder_path: OnceCell::new(),
             original_location: OnceCell::new(),
@@ -159,7 +158,10 @@ impl FileItem {
 
     /// Natural-order key of the type label.
     pub(crate) fn type_sort_key(&self) -> &SortKey {
-        &self.prepared().type_sort_key
+        let prepared = self.prepared();
+        prepared
+            .type_sort_key
+            .get_or_init(|| SortKey::new(&prepared.entry.type_label))
     }
 
     /// Lower-cased name for the search filter.
@@ -197,12 +199,15 @@ impl FileItem {
 
     /// The icon art for the item.
     pub(crate) fn art(&self) -> Art {
-        self.prepared().art
+        *self.prepared().art.get_or_init(|| Art::for_entry(self.entry()))
     }
 
     /// The emblems over the item's icon: a link, a lock.
     pub(crate) fn emblems(&self) -> Emblems {
-        self.prepared().emblems
+        *self
+            .prepared()
+            .emblems
+            .get_or_init(|| Emblems::for_entry(self.entry()))
     }
 
     /// The size of a file; `None` for folders and for files of unknown

@@ -22,7 +22,7 @@ use super::details_pane::DetailsPane;
 use super::file_drag::OutgoingDrag;
 use super::file_drop::{DropLabels, FirstOffer, PendingDrop, ProgramChecks};
 use super::file_ops::FileOperations;
-use super::folder_pane::FolderPane;
+use super::folder_pane::{FolderPane, FolderView};
 use super::menu_popover::MenuPopover;
 use super::recycle_bin_place::RecycleBinWatch;
 use super::search_box::SearchBox;
@@ -284,6 +284,8 @@ pub(crate) struct BrowserWindow {
     pub(super) pinning: Cell<bool>,
     /// The width band the layout was last fitted to.
     pub(super) window_width: Cell<WindowWidth>,
+    /// The last allocation of the window itself, in logical pixels.
+    allocated_size: Cell<Option<(i32, i32)>>,
     /// What the window must disconnect when it goes away.
     pub(super) handlers: RefCell<ExternalHandlers>,
     /// The running file operation, Trash support and the file
@@ -423,9 +425,36 @@ impl ObjectImpl for BrowserWindow {
 
 impl WidgetImpl for BrowserWindow {
     fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
+        let window = self.obj();
+        let resized = self
+            .allocated_size
+            .replace(Some((width, height)))
+            .is_some_and(|previous| previous != (width, height));
+        // Capture while the folder panes still have their previous
+        // allocations. Skip internal relayouts at the same window size.
+        let animation = if resized && window.is_mapped() && window.settings().is_gtk_enable_animations() {
+            window.context().view_animation_ms().map(|ms| {
+                window.folder_panes().map(|pane| {
+                    if pane.view() == FolderView::Details {
+                        None
+                    } else {
+                        pane.capture_zoom(ms)
+                    }
+                })
+            })
+        } else {
+            None
+        };
         self.parent_size_allocate(width, height, baseline);
-        crate::resize_edges::allocate(&*self.obj(), width, height);
-        self.obj().follow_width(width);
+        crate::resize_edges::allocate(&*window, width, height);
+        window.follow_width(width);
+        if let Some(animation) = animation {
+            for (pane, zoom) in window.folder_panes().into_iter().zip(animation) {
+                if let Some(zoom) = zoom {
+                    pane.animate_resize(zoom);
+                }
+            }
+        }
     }
 }
 

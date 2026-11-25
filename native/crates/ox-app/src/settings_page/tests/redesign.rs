@@ -232,6 +232,8 @@ fn every_setting_of_the_earlier_layout_is_on_one_of_the_new_pages() {
         "Icon grid padding",
         "Corner radius",
         "Blue file selection",
+        "Animate folder zoom",
+        "Zoom duration (ms)",
     ];
     for title in added_since {
         settings.row(title);

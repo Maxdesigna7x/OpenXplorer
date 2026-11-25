@@ -13,6 +13,7 @@
 
 mod parts;
 mod view;
+mod zoom;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -78,6 +79,7 @@ mod imp {
         /// The tab, by its store, and the location whose folder style
         /// the pane shows.
         pub(super) styled: RefCell<Option<super::StyledFor>>,
+        pub(super) zoom: RefCell<Option<super::zoom::Zoom>>,
     }
 
     #[glib::object_subclass]
@@ -110,7 +112,17 @@ mod imp {
         }
     }
 
-    impl WidgetImpl for FolderPane {}
+    impl WidgetImpl for FolderPane {
+        fn snapshot(&self, snapshot: &gtk::Snapshot) {
+            if let Some(child) = self.obj().first_child() {
+                if let Some(zoom) = self.zoom.borrow().as_ref() {
+                    zoom.snapshot(&self.obj(), &child, snapshot);
+                } else {
+                    self.obj().snapshot_child(&child, snapshot);
+                }
+            }
+        }
+    }
 }
 
 glib::wrapper! {
@@ -136,6 +148,7 @@ impl FolderPane {
     /// Notes that the pane shows the folder style of `uri` for the tab
     /// whose items are `store`.
     pub(crate) fn set_styled_for(&self, store: &gio::ListStore, uri: &str) {
+        self.stop_zoom_animation();
         self.imp().styled.replace(Some(StyledFor {
             store: store.downgrade(),
             uri: uri.to_owned(),
@@ -145,6 +158,7 @@ impl FolderPane {
     /// Notes that the pane shows the folder style `from` shows, for the
     /// same tab, as it does once that pane's style is copied to it.
     pub(crate) fn copy_styled_for(&self, from: &Self) {
+        self.stop_zoom_animation();
         let styled = from.imp().styled.borrow().clone();
         self.imp().styled.replace(styled);
     }
@@ -218,6 +232,7 @@ impl FolderPane {
         if self.page() == Some(page) {
             return;
         }
+        self.stop_zoom_animation();
         // Keyboard focus follows the page shown, never staying on a page that
         // is hidden: GTK would hand it to whatever control comes next in the
         // focus chain, such as the Details pane's close button.
@@ -493,6 +508,9 @@ impl FolderPane {
         // while the empty page (Try again) or a landing page has the keyboard
         // changes nothing.
         let previous = self.view();
+        if previous != view {
+            self.stop_zoom_animation();
+        }
         let switching_the_listing = self.page() == Some(PanePage::Listing) && self.view_has_focus();
         let parts = self.parts();
         let selection = parts.model.selection();

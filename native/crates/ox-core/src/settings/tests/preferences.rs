@@ -7,6 +7,20 @@
 use super::*;
 use crate::grouping::GroupBy;
 
+#[test]
+fn folder_zoom_uses_defaults_and_persists_valid_changes() {
+    let root = temporary_folder();
+    let mut store = Settings::open(root.path());
+    assert!(store.snapshot().preferences.animate_view_zoom);
+    assert_eq!(store.snapshot().preferences.view_zoom_ms, 100);
+
+    save_preferences(&mut store, &json!({"animateViewZoom": false, "viewZoomMs": 175}));
+    save_preferences(&mut store, &json!({"viewZoomMs": 501}));
+    let saved = Settings::open(root.path()).snapshot().preferences;
+    assert!(!saved.animate_view_zoom);
+    assert_eq!(saved.view_zoom_ms, 175);
+}
+
 /// Ported from `v2.0.0:desktop/tests/test_v05.py::SettingsWindowsTests::test_default_context_menu_classic`,
 /// whose classic default became Windows 11's compact menu, as Windows 11
 /// Explorer opens it.
