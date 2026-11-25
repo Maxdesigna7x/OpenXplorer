@@ -43,6 +43,7 @@ pub(in crate::window) struct Zoom {
     reflow: OnceCell<Reflow>,
     started: Cell<Option<i64>>,
     duration_us: i64,
+    first_frame_us: i64,
     progress: Cell<f64>,
     tick: Option<gtk::TickCallbackId>,
 }
@@ -78,6 +79,7 @@ impl FolderPane {
             reflow: OnceCell::new(),
             started: Cell::new(None),
             duration_us: i64::from(duration_ms) * 1_000,
+            first_frame_us: 0,
             progress: Cell::new(0.0),
             tick: None,
         })
@@ -104,6 +106,19 @@ impl FolderPane {
         }));
         self.imp().zoom.replace(Some(zoom));
         self.queue_draw();
+    }
+
+    pub(in crate::window) fn animate_resize(&self, mut zoom: Zoom) {
+        // During a live resize a new target can arrive every frame. Give
+        // each target one frame of movement so that tiles keep following
+        // the window edge while the pointer is still moving.
+        if let Some(clock) = self.frame_clock() {
+            zoom.first_frame_us = clock
+                .refresh_info(clock.frame_time())
+                .0
+                .clamp(0, zoom.duration_us / 2);
+        }
+        self.animate_zoom(zoom);
     }
 
     pub(in crate::window) fn stop_zoom_animation(&self) {
@@ -181,22 +196,27 @@ impl FolderPane {
 }
 
 impl Zoom {
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "elapsed is at most 500 milliseconds here"
-    )]
     fn advance(&self, time: i64) -> bool {
         let start = self.started.get().unwrap_or_else(|| {
-            self.started.set(Some(time));
-            time
+            let start = time.saturating_sub(self.first_frame_us);
+            self.started.set(Some(start));
+            start
         });
         let elapsed = time.saturating_sub(start);
         if elapsed >= self.duration_us {
             return false;
         }
-        let fraction = elapsed as f64 / self.duration_us as f64;
-        self.progress.set(1.0 - (1.0 - fraction).powi(3));
+        self.progress.set(self.eased_progress(elapsed));
         true
+    }
+
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "elapsed is at most 500 milliseconds here"
+    )]
+    fn eased_progress(&self, elapsed: i64) -> f64 {
+        let fraction = elapsed as f64 / self.duration_us as f64;
+        1.0 - (1.0 - fraction).powi(3)
     }
 
     // A second wheel step begins at the rectangles on screen, even when
@@ -225,12 +245,14 @@ impl Zoom {
             if let Some(reflow) = self.prepare_reflow(pane, child) {
                 let _ = self.reflow.set(reflow);
                 self.started.set(None);
-                self.progress.set(0.0);
+                self.progress.set(self.eased_progress(self.first_frame_us));
             }
         }
         let Some(reflow) = self.reflow.get() else {
-            if let Some(before) = &self.before_frame {
+            if let (Some(before), Some(bounds)) = (&self.before_frame, pane.bounds_for_zoom()) {
+                snapshot.push_clip(&bounds);
                 snapshot.append_node(before);
+                snapshot.pop();
             } else {
                 pane.snapshot_child(child, snapshot);
             }
@@ -368,7 +390,47 @@ impl MovingTile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::harness::{wait_for_frames, Fixture, TestWindow};
+    use std::rc::Rc;
+
+    use crate::test_support::harness::{wait_for_frames, wait_until, Fixture, TestWindow};
+
+    #[gtk::test]
+    fn resizing_the_window_moves_files_between_grid_columns() {
+        let fixture = Fixture::with_files(80);
+        let test = TestWindow::open(&fixture.uri());
+        let pane = test.window.folder_pane();
+        let settings = pane.settings();
+        let previous = settings.is_gtk_enable_animations();
+        settings.set_gtk_enable_animations(true);
+        test.window.show_view(FolderView::from_key("large").unwrap());
+        wait_for_frames(pane, 3);
+
+        let observed = Rc::new(Cell::new(false));
+        let record = Rc::clone(&observed);
+        let tick = pane.add_tick_callback(move |pane, _| {
+            if let Some(zoom) = pane.imp().zoom.borrow().as_ref() {
+                if let Some(reflow) = zoom.reflow.get() {
+                    record.set(
+                        record.get()
+                            || zoom.progress.get() > 0.0
+                                && reflow.tiles.iter().any(|moving| {
+                                    zoom.before.iter().any(|old| {
+                                        old.item == moving.tile.item
+                                            && old.rect == moving.from
+                                            && old.image.as_ptr() == moving.tile.image.as_ptr()
+                                    }) && (moving.from.x() - moving.tile.rect.x()).abs() > 1.0
+                                        && (moving.from.y() - moving.tile.rect.y()).abs() > 1.0
+                                }),
+                    );
+                }
+            }
+            glib::ControlFlow::Continue
+        });
+        test.window.set_default_size(780, 680);
+        wait_until("the resized grid to move its files", || observed.get());
+        tick.remove();
+        settings.set_gtk_enable_animations(previous);
+    }
 
     #[gtk::test]
     fn zoom_moves_the_same_file_to_its_new_grid_slot_and_retargets() {

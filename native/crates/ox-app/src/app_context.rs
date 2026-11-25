@@ -266,6 +266,11 @@ impl AppContext {
         self.settings().data()
     }
 
+    /// The duration of folder layout animations, if enabled.
+    pub(crate) fn view_animation_ms(&self) -> Option<u32> {
+        self.settings().view_animation_ms()
+    }
+
     /// The settings folder (`~/.config/winspace`).
     pub(crate) fn settings_directory(&self) -> PathBuf {
         self.settings().directory()

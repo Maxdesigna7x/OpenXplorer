@@ -103,13 +103,13 @@ const PANE_WIDTHS: RowText = RowText {
 
 const ANIMATE_VIEW_ZOOM: RowText = RowText {
     title: "Animate folder zoom",
-    description: "Smoothly resize the folder view when you hold Ctrl and scroll.",
-    keywords: "wheel icon size motion transition",
+    description: "Animate files when you zoom with Ctrl and the wheel or resize the window.",
+    keywords: "wheel icon size motion transition window resize",
 };
 
 const VIEW_ZOOM_DURATION: RowText = RowText {
     title: "Zoom duration (ms)",
-    description: "How long the folder zoom animation lasts.",
+    description: "How long folder zoom and window resize animations last.",
     keywords: "wheel animation speed milliseconds",
 };
 

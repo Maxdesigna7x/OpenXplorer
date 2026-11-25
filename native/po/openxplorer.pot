@@ -2905,6 +2905,10 @@ msgid "Always at the top"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
+msgid "Animate files when you zoom with Ctrl and the wheel or resize the window."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
 msgid "Animate folder zoom"
 msgstr ""
 
@@ -2929,7 +2933,7 @@ msgid "Hide expand arrows in the sidebar"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
-msgid "How long the folder zoom animation lasts."
+msgid "How long folder zoom and window resize animations last."
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
@@ -2970,10 +2974,6 @@ msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
 msgid "Sidebar and column widths"
-msgstr ""
-
-#: crates/ox-app/src/settings_page/appearance.rs
-msgid "Smoothly resize the folder view when you hold Ctrl and scroll."
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
@@ -3065,7 +3065,7 @@ msgid "wheel animation speed milliseconds"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
-msgid "wheel icon size motion transition"
+msgid "wheel icon size motion transition window resize"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs

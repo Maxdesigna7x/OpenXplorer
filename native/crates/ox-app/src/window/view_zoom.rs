@@ -81,12 +81,10 @@ impl BrowserWindow {
         if zoomed == view {
             return;
         }
-        let preferences = self.context().settings_data().preferences;
-        let animation = if preferences.animate_view_zoom {
-            pane.capture_zoom(preferences.view_zoom_ms)
-        } else {
-            None
-        };
+        let animation = self
+            .context()
+            .view_animation_ms()
+            .and_then(|ms| pane.capture_zoom(ms));
         let kept = pane.model().first_selected();
         self.set_action_state(WindowAction::View, &zoomed.as_str().to_variant());
         self.show_view(zoomed);

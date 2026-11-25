@@ -65,6 +65,13 @@ impl SettingsStore {
         self.settings.borrow().data().clone()
     }
 
+    /// The duration of folder layout animations, if enabled.
+    pub(crate) fn view_animation_ms(&self) -> Option<u32> {
+        let settings = self.settings.borrow();
+        let preferences = &settings.data().preferences;
+        preferences.animate_view_zoom.then_some(preferences.view_zoom_ms)
+    }
+
     /// The settings folder (`~/.config/winspace`), which also keeps the
     /// desktop integration's records.
     pub(crate) fn directory(&self) -> PathBuf {
