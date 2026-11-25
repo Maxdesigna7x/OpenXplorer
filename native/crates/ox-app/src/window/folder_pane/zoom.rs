@@ -390,6 +390,7 @@ impl MovingTile {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ox_core::settings::PreferencesUpdate;
     use std::rc::Rc;
 
     use crate::test_support::harness::{wait_for_frames, wait_until, Fixture, TestWindow};
@@ -404,6 +405,31 @@ mod tests {
         settings.set_gtk_enable_animations(true);
         test.window.show_view(FolderView::from_key("large").unwrap());
         wait_for_frames(pane, 3);
+
+        let observed = Rc::new(Cell::new(false));
+        let record = Rc::clone(&observed);
+        let tick = pane.add_tick_callback(move |pane, _| {
+            record.set(record.get() || pane.imp().zoom.borrow().is_some());
+            glib::ControlFlow::Continue
+        });
+        test.window.set_default_size(780, 680);
+        wait_until("the window to shrink", || (test.window.width() - 780).abs() <= 8);
+        wait_for_frames(pane, 3);
+        tick.remove();
+        assert!(!observed.get(), "window resize animation starts off");
+
+        test.context.update_preferences(
+            PreferencesUpdate {
+                animate_view_zoom: Some(false),
+                animate_window_resize: Some(true),
+                ..PreferencesUpdate::default()
+            },
+            |outcome| outcome.expect("the independent animation choices are saved"),
+        );
+        wait_until("resize animation to be enabled", || {
+            test.context.resize_animation_ms().is_some()
+        });
+        assert!(test.context.view_animation_ms().is_none());
 
         let observed = Rc::new(Cell::new(false));
         let record = Rc::clone(&observed);
@@ -426,7 +452,7 @@ mod tests {
             }
             glib::ControlFlow::Continue
         });
-        test.window.set_default_size(780, 680);
+        test.window.set_default_size(1320, 810);
         wait_until("the resized grid to move its files", || observed.get());
         tick.remove();
         settings.set_gtk_enable_animations(previous);

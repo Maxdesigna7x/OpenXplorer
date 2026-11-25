@@ -12,12 +12,15 @@ fn folder_zoom_uses_defaults_and_persists_valid_changes() {
     let root = temporary_folder();
     let mut store = Settings::open(root.path());
     assert!(store.snapshot().preferences.animate_view_zoom);
+    assert!(!store.snapshot().preferences.animate_window_resize);
     assert_eq!(store.snapshot().preferences.view_zoom_ms, 100);
 
     save_preferences(&mut store, &json!({"animateViewZoom": false, "viewZoomMs": 175}));
     save_preferences(&mut store, &json!({"viewZoomMs": 501}));
+    save_preferences(&mut store, &json!({"animateWindowResize": true}));
     let saved = Settings::open(root.path()).snapshot().preferences;
     assert!(!saved.animate_view_zoom);
+    assert!(saved.animate_window_resize);
     assert_eq!(saved.view_zoom_ms, 175);
 }
 

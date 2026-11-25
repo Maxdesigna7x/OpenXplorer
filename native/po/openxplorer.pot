@@ -2905,11 +2905,23 @@ msgid "Always at the top"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
-msgid "Animate files when you zoom with Ctrl and the wheel or resize the window."
+msgid "Animate files when the window changes size."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
+msgid "Animate files when you zoom with Ctrl and the wheel."
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
 msgid "Animate folder zoom"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
+msgid "Animate window resize"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
+msgid "Animation duration (ms)"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
@@ -3021,10 +3033,6 @@ msgid "Windows 11 · Compact actions (default)"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
-msgid "Zoom duration (ms)"
-msgstr ""
-
-#: crates/ox-app/src/settings_page/appearance.rs
 msgid "appearance dark light system colour color mode"
 msgstr ""
 
@@ -3061,15 +3069,19 @@ msgid "tab menu right-click move tab new window open windows extra more items wi
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
-msgid "wheel animation speed milliseconds"
+msgid "wheel icon size motion transition"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
-msgid "wheel icon size motion transition window resize"
+msgid "window resize reflow motion transition"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
 msgid "zoom font larger smaller ctrl plus minus reset accessibility scale. Ctrl + makes text larger, Ctrl − smaller, and Ctrl 0 resets it. Saved for all windows; desktop scaling is unchanged."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/appearance.rs
+msgid "zoom wheel animation speed milliseconds"
 msgstr ""
 
 #. Keep each {name} as it is: the app puts a value there.

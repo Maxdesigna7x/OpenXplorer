@@ -266,9 +266,14 @@ impl AppContext {
         self.settings().data()
     }
 
-    /// The duration of folder layout animations, if enabled.
+    /// The duration of folder zoom animations, if enabled.
     pub(crate) fn view_animation_ms(&self) -> Option<u32> {
         self.settings().view_animation_ms()
+    }
+
+    /// The duration of window resize animations, if enabled.
+    pub(crate) fn resize_animation_ms(&self) -> Option<u32> {
+        self.settings().resize_animation_ms()
     }
 
     /// The settings folder (`~/.config/winspace`).
