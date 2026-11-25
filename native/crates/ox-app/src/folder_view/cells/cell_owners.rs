@@ -442,13 +442,14 @@ impl CellOwners {
     /// position each shows, for a rubber band to test against.
     pub(crate) fn shown_items(&self, view: &impl IsA<gtk::Widget>) -> Vec<(u32, gtk::Widget)> {
         let view = view.as_ref();
-        let mut shown: Vec<(u32, gtk::Widget)> = Vec::new();
+        let mut shown = Vec::new();
+        let mut positions = HashSet::new();
         for owner in self.owners.borrow().iter() {
             let (Some(position), Some(cell)) = (owner.bound_position(), owner.cell.upgrade()) else {
                 continue;
             };
             let row = item_widget(&cell).filter(|row| row.is_ancestor(view));
-            if let Some(row) = row.filter(|_| !shown.iter().any(|(seen, _)| *seen == position)) {
+            if let Some(row) = row.filter(|_| positions.insert(position)) {
                 shown.push((position, row));
             }
         }

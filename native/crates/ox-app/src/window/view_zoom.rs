@@ -43,6 +43,9 @@ impl BrowserWindow {
                     .contains(gdk::ModifierType::CONTROL_MASK)
                 {
                     pending.set(0.0);
+                    if let Some(pane) = wheel.widget().and_downcast::<FolderPane>() {
+                        pane.stop_zoom_animation();
+                    }
                     return glib::Propagation::Proceed;
                 }
                 let (steps, rest) = zoom_steps(pending.get(), delta_y, wheel.unit());
@@ -55,6 +58,17 @@ impl BrowserWindow {
             }
         ));
         pane.add_controller(wheel);
+        let input = gtk::EventControllerLegacy::new();
+        input.set_propagation_phase(gtk::PropagationPhase::Capture);
+        input.connect_event(|input, event| {
+            if event.event_type() == gdk::EventType::ButtonPress {
+                if let Some(pane) = input.widget().and_downcast::<FolderPane>() {
+                    pane.stop_zoom_animation();
+                }
+            }
+            glib::Propagation::Proceed
+        });
+        pane.add_controller(input);
     }
 
     /// Shows the layout `steps` steps bigger (smaller when negative) and
@@ -69,7 +83,7 @@ impl BrowserWindow {
         }
         let preferences = self.context().settings_data().preferences;
         let animation = if preferences.animate_view_zoom {
-            pane.capture_zoom(view, zoomed, preferences.view_zoom_ms)
+            pane.capture_zoom(preferences.view_zoom_ms)
         } else {
             None
         };
