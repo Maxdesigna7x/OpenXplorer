@@ -52,20 +52,21 @@
           </object>
         </child>
         <child>
-          <object class="GtkListBox" id="category_list">
-            <property name="selection-mode">browse</property>
-            <property name="activate-on-single-click">false</property>
-            <style>
-              <class name="settings-categories"/>
-            </style>
-            <accessibility>
-              <property name="label" translatable="yes">Settings categories</property>
-            </accessibility>
-          </object>
-        </child>
-        <child>
-          <object class="GtkBox">
+          <object class="GtkScrolledWindow">
             <property name="vexpand">true</property>
+            <property name="hscrollbar-policy">never</property>
+            <property name="child">
+              <object class="GtkListBox" id="category_list">
+                <property name="selection-mode">browse</property>
+                <property name="activate-on-single-click">false</property>
+                <style>
+                  <class name="settings-categories"/>
+                </style>
+                <accessibility>
+                  <property name="label" translatable="yes">Settings categories</property>
+                </accessibility>
+              </object>
+            </property>
           </object>
         </child>
         <child>

@@ -20,7 +20,9 @@ use super::row::SettingRow;
 use super::section::SettingsSection;
 use super::status_card::StatusCard;
 use super::SettingsPage;
-use crate::test_support::harness::{descendants, skin, wait_until, Fixture, TestWindow, ThemeGuard};
+use crate::test_support::harness::{
+    descendants, skin, wait_for_frames, wait_until, Fixture, TestWindow, ThemeGuard,
+};
 use crate::test_support::python::{python_preference, python_saves_preferences};
 use crate::text_size::TextSize;
 use crate::window::WindowAction;
@@ -135,6 +137,60 @@ impl SettingsTest {
     fn chosen_category(&self) -> Option<Category> {
         let chosen = self.page.imp().category_list.selected_row();
         chosen.and_downcast::<CategoryRow>().map(|row| row.category())
+    }
+}
+
+#[gtk::test]
+fn settings_remains_usable_at_the_explorer_window_minimum() {
+    let settings = SettingsTest::open();
+    let window = &settings.test.window;
+    window.set_default_size(650, 320);
+    wait_until("a compact Settings layout", || {
+        (window.width() - 650).abs() <= 8 && settings.page.has_css_class("compact-window")
+    });
+    wait_for_frames(window, 3);
+    window.set_default_size(400, 240);
+    wait_for_frames(window, 5);
+
+    let check_size = || {
+        let (width, height) = (window.width(), window.height());
+        assert!(
+            (width - 400).abs() <= 8 && (height - 240).abs() <= 8,
+            "Settings size: {width} × {height}"
+        );
+        assert!(
+            settings.page.imp().pages.width() > 150,
+            "room for settings controls"
+        );
+        assert!(settings.page.imp().search_entry.is_mapped());
+        assert!(settings.page.imp().back_button.is_mapped());
+    };
+    check_size();
+
+    let categories = settings
+        .page
+        .imp()
+        .category_list
+        .ancestor(gtk::ScrolledWindow::static_type())
+        .and_downcast::<gtk::ScrolledWindow>()
+        .expect("the Settings categories scroll");
+    let scroll = categories.vadjustment();
+    assert!(scroll.page_size() > 40.0 && scroll.upper() > scroll.page_size());
+
+    for category in Category::ALL {
+        settings.page.show_view(SettingsView::Category(category));
+        wait_for_frames(window, 2);
+        check_size();
+    }
+    for subpage in Subpage::ALL {
+        settings.page.show_view(SettingsView::Subpage(subpage));
+        wait_for_frames(window, 2);
+        check_size();
+    }
+    for query in ["zoom", "zz-no-such-setting"] {
+        settings.page.search(query);
+        wait_for_frames(window, 2);
+        check_size();
     }
 }
 

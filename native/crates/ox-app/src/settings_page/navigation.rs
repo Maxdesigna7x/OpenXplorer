@@ -44,6 +44,7 @@ impl SettingsPage {
         let no_matches = gtk::Label::builder()
             .label(ox_core::i18n::gettext("No settings match your search."))
             .valign(gtk::Align::Start)
+            .wrap(true)
             .css_classes(["settings-no-matches"])
             .build();
         imp.pages.add_named(&no_matches, Some(NO_MATCHES_PAGE));
@@ -64,10 +65,7 @@ impl SettingsPage {
             .build();
         content.append(&match_count);
         content.append(&results);
-        let scrolled = gtk::ScrolledWindow::builder()
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .child(&content)
-            .build();
+        let scrolled = gtk::ScrolledWindow::builder().child(&content).build();
         imp.pages.add_named(&scrolled, Some(RESULTS_PAGE));
         imp.results.set(results).expect("the navigation is built once");
         imp.match_count

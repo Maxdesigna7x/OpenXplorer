@@ -216,6 +216,7 @@ impl BrowserWindow {
             pane.details().show_columns(details_columns);
         }
         self.settings_page().fit_to_width(band.settings_page_width());
+        self.settings_page().set_compact_controls(compact);
         self.render_landing();
     }
 
