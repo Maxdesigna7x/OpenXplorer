@@ -2,11 +2,9 @@
 //! Showing and hiding the navigation pane (SIDE-024).
 //!
 //! Dolphin closes its Places panel with F9 and Explorer turns off View >
-//! Show > Navigation pane; here View > Navigation pane and F9 run
-//! `win.sidebar`, and the choice is saved for every window
-//! (`hideSidebar`). While the pane is hidden, a Places button after Up and
-//! Refresh lists the same places, as Dolphin's location bar does when its
-//! Places panel is closed.
+//! Show > Navigation pane. The navigation row's button, View and F9
+//! run the same saved action. The narrow layout temporarily hides the
+//! pane, and Places lists its locations whenever it is hidden.
 
 use gtk::glib;
 use gtk::prelude::*;
@@ -15,7 +13,7 @@ use gtk::subclass::prelude::*;
 use crate::icons::{self, Icon};
 
 use super::menu_popover::{name_menu_button, MenuPopover};
-use super::BrowserWindow;
+use super::{BrowserWindow, WindowAction};
 
 /// The glyph of the Places button, as big as Back's and Up's.
 const PLACES_GLYPH: i32 = 16;
@@ -24,9 +22,22 @@ impl BrowserWindow {
     /// Adds the Places button to the navigation row and shows the pane as
     /// the preferences say.
     pub(super) fn install_sidebar_toggle(&self) {
+        let imp = self.imp();
+        let toggle = gtk::ToggleButton::builder()
+            .child(&icons::image(Icon::PanelLeft, PLACES_GLYPH))
+            .tooltip_text(ox_core::i18n::gettext("Toggle navigation pane (F9)"))
+            .valign(gtk::Align::Center)
+            .css_classes(["nav-sidebar-toggle"])
+            .build();
+        toggle.update_property(&[gtk::accessible::Property::Label(&ox_core::i18n::gettext(
+            "Navigation pane",
+        ))]);
+        WindowAction::Sidebar.assign_to(&toggle);
+        imp.navigation_row
+            .insert_child_after(&toggle, Some(&*imp.navigation_buttons));
         let button = gtk::MenuButton::builder()
             .child(&icons::image(Icon::Folder, PLACES_GLYPH))
-            .tooltip_text(ox_core::i18n::gettext("Places (F9 shows the navigation pane)"))
+            .tooltip_text(ox_core::i18n::gettext("Places"))
             .valign(gtk::Align::Center)
             .css_classes(["nav-places"])
             .visible(false)
@@ -42,9 +53,10 @@ impl BrowserWindow {
             popover,
             move |_| popover.set_entries(window.sidebar().places_menu())
         ));
-        let imp = self.imp();
-        imp.navigation_row
-            .insert_child_after(&button, Some(&*imp.navigation_buttons));
+        imp.navigation_row.insert_child_after(&button, Some(&toggle));
+        imp.sidebar_toggle
+            .set(toggle)
+            .expect("the sidebar switch is added once");
         imp.places_button
             .set(button)
             .expect("the Places button is added once");
@@ -56,11 +68,36 @@ impl BrowserWindow {
     /// Shows or hides the navigation pane, its resizer with it, and the
     /// Places button in its stead.
     pub(super) fn show_sidebar(&self, shown: bool) {
+        let room = self.is_picking() || !self.window_width().is_compact();
+        let shown = room && shown;
+        let imp = self.imp();
+        let focus = GtkWindowExt::focus(self);
+        let sidebar_focused = focus.as_ref().is_some_and(|widget| {
+            widget.is_ancestor(self.sidebar()) || widget == self.sidebar_resizer().upcast_ref::<gtk::Widget>()
+        });
+        if !shown && sidebar_focused {
+            self.folder_pane().focus_view();
+        }
         self.sidebar().set_visible(shown);
         self.sidebar_resizer().set_visible(shown);
-        if let Some(button) = self.imp().places_button.get() {
+        if let Some(button) = imp.places_button.get() {
             button.set_visible(!shown);
+            if let Some(toggle) = imp.sidebar_toggle.get() {
+                if !room && focus.as_ref() == Some(toggle.upcast_ref()) {
+                    button.grab_focus();
+                }
+                toggle.set_visible(room);
+            }
         }
+    }
+
+    /// Reapplies the user's choice at the current width.
+    pub(super) fn fit_sidebar(&self) {
+        let shown = self
+            .window_action_state(WindowAction::Sidebar)
+            .and_then(|state| state.get::<bool>())
+            .unwrap_or(true);
+        self.show_sidebar(shown);
     }
 
     /// The Places button shown while the navigation pane is hidden.

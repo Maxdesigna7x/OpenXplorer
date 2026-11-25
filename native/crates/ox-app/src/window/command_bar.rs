@@ -184,6 +184,8 @@ mod imp {
         /// What the "…" menu shows now: Map network drive or not, Pin
         /// or Unpin.
         pub(super) more_state: RefCell<super::MoreMenuState>,
+        /// The More button stays outside the scrollable strip in tiny windows.
+        pub(super) more_button: OnceCell<gtk::MenuButton>,
         /// The menu button whose menu is open (`menu_group.rs`).
         pub(super) open_menu: RefCell<Option<gtk::MenuButton>>,
         /// The window whose going inactive closes the open menu.
@@ -309,6 +311,7 @@ impl CommandBar {
             .expect("constructed runs once per object");
         let (more, menu) = more_button();
         group.append(&more);
+        imp.more_button.set(more).expect("the bar has one More button");
         imp.more_menu.set(menu).expect("constructed runs once per object");
     }
 
@@ -453,6 +456,18 @@ impl CommandBar {
             control.set_visible(!band.is_compact());
         }
         imp.compact.set(band.is_compact());
+        if let Some(button) = imp.more_button.get() {
+            let group = &*imp.file_commands;
+            if band == WindowWidth::Tiny && button.parent().as_ref() == Some(group.upcast_ref()) {
+                button.popdown();
+                group.remove(button);
+                self.insert_child_after(button, self.first_child().as_ref());
+            } else if band != WindowWidth::Tiny && button.parent().as_ref() == Some(self.upcast_ref()) {
+                button.popdown();
+                self.remove(button);
+                group.append(button);
+            }
+        }
         self.show_share();
     }
 

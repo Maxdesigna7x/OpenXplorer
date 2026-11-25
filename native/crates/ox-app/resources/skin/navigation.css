@@ -18,6 +18,9 @@
 }
 .navigation .nav-buttons { border-spacing: 5px; }
 .navigation .nav-buttons button { min-width: 34px; min-height: 34px; }
+window.ox .navigation .nav-sidebar-toggle,
+window.ox .navigation .nav-places > button { min-width: 34px; min-height: 34px; padding: 0; }
+window.ox .navigation .nav-sidebar-toggle:checked { background-color: @ox_selected; color: @ox_accent; }
 
 /* ---- Address and search fields (R07: 4px corners) ---- */
 .address, .search-wrap {

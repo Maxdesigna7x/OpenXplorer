@@ -202,6 +202,7 @@ impl BrowserWindow {
         self.reset_sidebar_on_double_click();
         self.install_sidebar_resizer();
         self.install_sidebar_toggle();
+        self.install_initial_width();
         self.install_folder_tree();
         self.follow_layout_reset();
         self.follow_folder_views_changed();

@@ -6,7 +6,7 @@
 //! maximized state, and so does this. A window saves its size a moment
 //! after the user stops resizing it, or maximizes or restores it, and when
 //! it closes; the size saved is the one it has when not maximized, kept
-//! within the 670 × 470 minimum the settings accept. Full screen is never
+//! within the browsing window's 400 × 240 minimum. Full screen is never
 //! saved, from F11 or the desktop: the size and state the window had
 //! before it are noted as they change and saved as usual. Every browser window
 //! opens through [`BrowserWindow::present_as_new_window`]; snapshot
@@ -14,7 +14,7 @@
 //!
 //! Another application's Open or Save dialog (INT-032) is resized like
 //! any window and keeps a size of its own, as Windows' common file dialog
-//! does: it opens at the size the last dialog was left at, within the same
+//! does: it opens at the size the last dialog was left at, within its own
 //! minimum, and saves it the same way, never maximized and never over the
 //! windows' size ([`BrowserWindow::open_dialog_at_saved_size`]).
 
@@ -45,6 +45,9 @@ const DIALOG_SIZE: WindowSize = WindowSize {
     height: 640,
     maximized: false,
 };
+
+const DIALOG_MIN_WIDTH: u32 = 670;
+const DIALOG_MIN_HEIGHT: u32 = 470;
 
 impl BrowserWindow {
     /// Shows a new window at the saved size and saves its size from now
@@ -78,7 +81,11 @@ impl BrowserWindow {
             .preferences
             .dialog_size
             .unwrap_or(DIALOG_SIZE);
-        self.set_default_size(pixels(size.width), pixels(size.height));
+        self.set_size_request(pixels(DIALOG_MIN_WIDTH), pixels(DIALOG_MIN_HEIGHT));
+        self.set_default_size(
+            pixels(size.width.max(DIALOG_MIN_WIDTH)),
+            pixels(size.height.max(DIALOG_MIN_HEIGHT)),
+        );
     }
 
     /// Saves the dialog's size whenever the user changes it, once it is
@@ -127,9 +134,14 @@ impl BrowserWindow {
         };
         // A window narrower than the minimum saves the minimum rather than
         // nothing, so the next window does not open at an older size.
+        let (min_width, min_height) = if self.is_picking() {
+            (DIALOG_MIN_WIDTH, DIALOG_MIN_HEIGHT)
+        } else {
+            (*WINDOW_WIDTHS.start(), *WINDOW_HEIGHTS.start())
+        };
         Some(WindowSize {
-            width: width.clamp(*WINDOW_WIDTHS.start(), *WINDOW_WIDTHS.end()),
-            height: height.clamp(*WINDOW_HEIGHTS.start(), *WINDOW_HEIGHTS.end()),
+            width: width.clamp(min_width, *WINDOW_WIDTHS.end()),
+            height: height.clamp(min_height, *WINDOW_HEIGHTS.end()),
             maximized,
         })
     }

@@ -5,6 +5,7 @@
 //! drops the search box, some commands and two columns.
 
 use gtk::prelude::*;
+use gtk::subclass::prelude::*;
 
 use super::geometry::{bounds, button_for, laid_out, laid_out_with_details_pane};
 use crate::folder_view::sorting::SortColumn;
@@ -15,6 +16,79 @@ pub(super) fn resize(test: &TestWindow, width: i32) {
     test.window.set_default_size(width, 720);
     wait_until("the new width", || (test.window.width() - width).abs() <= 8);
     wait_for_frames(&test.window, 3);
+}
+
+#[gtk::test]
+fn the_sidebar_hides_for_width_and_the_button_keeps_the_manual_choice() {
+    let fixture = Fixture::standard();
+    let test = laid_out(&fixture.uri());
+    let window = &test.window;
+    let toggle = window.imp().sidebar_toggle.get().expect("the navigation toggle");
+    assert!(window.sidebar().is_visible() && toggle.is_visible());
+
+    resize(&test, 650);
+    assert!(!window.sidebar().is_visible());
+    assert!(window.places_button().is_visible());
+    assert_eq!(
+        window
+            .action_state("sidebar")
+            .and_then(|state| state.get::<bool>()),
+        Some(true)
+    );
+    resize(&test, 900);
+    assert!(window.sidebar().is_visible() && toggle.is_visible());
+
+    toggle.emit_clicked();
+    assert!(!window.sidebar().is_visible());
+    assert!(toggle.is_visible());
+    resize(&test, 650);
+    resize(&test, 900);
+    assert!(
+        !window.sidebar().is_visible(),
+        "the manual choice survives resizing"
+    );
+    toggle.emit_clicked();
+    assert!(window.sidebar().is_visible());
+}
+
+#[gtk::test]
+fn a_browsing_window_fits_400_by_240_with_its_navigation_controls() {
+    let fixture = Fixture::standard();
+    let test = laid_out(&fixture.uri());
+    // Enter the compact layout as a compositor would while dragging an edge.
+    resize(&test, 650);
+    test.window.set_default_size(400, 240);
+    wait_for_frames(&test.window, 5);
+    let width = test.window.width();
+    let height = test.window.height();
+    assert!(
+        (width - 400).abs() <= 8 && (height - 240).abs() <= 8,
+        "actual size: {width} × {height}"
+    );
+    assert!(test.window.places_button().is_visible());
+    assert!(test.window.address_bar().is_visible());
+    assert!(test.window.folder_pane().height() >= 60, "room for the file list");
+    let command_bar = test.window.command_bar();
+    assert!(
+        std::iter::successors(command_bar.first_child(), WidgetExt::next_sibling)
+            .any(|widget| widget.is_visible() && widget.has_css_class("more-command")),
+        "More stays directly accessible outside the scrolling commands"
+    );
+}
+
+#[gtk::test]
+fn a_window_can_open_at_the_compact_minimum() {
+    let fixture = Fixture::standard();
+    let test = TestWindow::without_tabs();
+    test.window.set_default_size(400, 240);
+    test.show(&fixture.uri());
+    wait_for_frames(&test.window, 3);
+    let (width, height) = (test.window.width(), test.window.height());
+    assert!(
+        (width - 400).abs() <= 8 && (height - 240).abs() <= 8,
+        "startup size: {width} × {height}"
+    );
+    assert!(test.window.places_button().is_visible());
 }
 
 /// parity: LOOK-022

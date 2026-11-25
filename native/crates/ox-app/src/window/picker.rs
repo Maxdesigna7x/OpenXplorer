@@ -530,8 +530,8 @@ impl BrowserWindow {
             self.set_action_enabled(action, false);
         }
         self.update_share_command();
-        // Resizable like any window, from 670 × 470 up (`window.ui`), at
-        // the size the last dialog was left at (window_size.rs).
+        // The picker keeps the size the last dialog was left at
+        // (window_size.rs).
         self.open_dialog_at_saved_size();
         self.apply_chooser_listing();
         self.open_start_folder(start_folders);
@@ -4325,8 +4325,8 @@ mod tests {
         assert_eq!(bands.len(), 5, "the dialog went through every width: {bands:?}");
     }
 
-    /// The dialog is resized like any window, down to the explorer's
-    /// 670 × 470 minimum, and the next dialog opens at the size this one
+    /// The dialog can resize down to its own 670 × 470 minimum,
+    /// and the next dialog opens at the size this one
     /// was left at, as Windows' common file dialog keeps its size; the
     /// explorer windows keep theirs.
     ///
@@ -4346,7 +4346,7 @@ mod tests {
         wait_until("the folder's listing", || window.is_listed());
         assert!(window.is_resizable(), "the dialog can be resized");
         assert_eq!(window.default_size(), (980, 640), "a first dialog's size");
-        assert_eq!(window.size_request(), (670, 470), "the explorer's minimum");
+        assert_eq!(window.size_request(), (670, 470), "the picker's minimum");
 
         // Made smaller than its minimum, it stops there. The surface is
         // the whole window, its frame included.
