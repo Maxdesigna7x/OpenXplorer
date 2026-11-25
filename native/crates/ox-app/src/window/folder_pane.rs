@@ -116,7 +116,7 @@ mod imp {
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             if let Some(child) = self.obj().first_child() {
                 if let Some(zoom) = self.zoom.borrow().as_ref() {
-                    zoom.snapshot(&*self.obj(), &child, snapshot);
+                    zoom.snapshot(&self.obj(), &child, snapshot);
                 } else {
                     self.obj().snapshot_child(&child, snapshot);
                 }
