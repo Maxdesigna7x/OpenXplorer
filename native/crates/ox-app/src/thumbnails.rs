@@ -56,8 +56,8 @@ fn decoding_slots() -> usize {
 }
 /// How many thumbnails are made at a time.
 const MAKING_AT_ONCE: usize = 2;
-/// How many decoded previews are kept.
-const MAX_KEPT: usize = 512;
+/// How many decoded previews are kept (one highest-resolution texture per item version).
+const MAX_KEPT: usize = 1024;
 
 /// Which items of the folder shown get previews.
 #[expect(
@@ -171,8 +171,8 @@ fn stands_for(entry: &Entry) -> Option<&str> {
         .or(entry.target_uri.as_deref())
 }
 
-/// A decoded preview's item, version and size.
-type PreviewKey = (String, Option<u64>, i32);
+/// A decoded preview's item and version.
+type PreviewKey = (String, Option<u64>);
 
 /// What a preview is wanted of.
 #[derive(Debug, Clone)]
@@ -212,15 +212,16 @@ impl PreviewRequest {
     }
 
     fn key(&self) -> PreviewKey {
-        (self.uri.clone(), self.modified, self.pixels)
+        (self.uri.clone(), self.modified)
     }
 }
 
 thread_local! {
     static DECODING: Rc<Slots> = Rc::new(Slots::new(decoding_slots()));
     static MAKING: Rc<Slots> = Rc::new(Slots::new(MAKING_AT_ONCE));
-    /// Decoded previews by item, version and size.
-    static KEPT: RefCell<HashMap<PreviewKey, gdk::Texture>> = RefCell::new(HashMap::new());
+    /// Decoded previews by item and version, keeping the highest resolution
+    /// decoded so far so zooming reuses textures without flashing default icons.
+    static KEPT: RefCell<HashMap<PreviewKey, (i32, gdk::Texture)>> = RefCell::new(HashMap::new());
     /// Item versions no thumbnail could be made of in this run.
     static FAILED: RefCell<HashSet<(String, Option<u64>)>> = RefCell::new(HashSet::new());
     /// The types gdk-pixbuf's loaders declare they read.
@@ -229,6 +230,16 @@ thread_local! {
         .flat_map(PixbufFormat::mime_types)
         .map(|mime| mime.to_string())
         .collect();
+}
+
+/// Returns an already-decoded preview from memory for `request` synchronously,
+/// along with whether its resolution already satisfies `request.pixels`.
+pub(crate) fn cached_preview(request: &PreviewRequest) -> Option<(gdk::Texture, bool)> {
+    let key = request.key();
+    KEPT.with_borrow(|kept| {
+        kept.get(&key)
+            .map(|(pixels, texture)| (texture.clone(), *pixels >= request.pixels))
+    })
 }
 
 /// Whether gdk-pixbuf may be asked to decode the item of `content_type`,
@@ -252,11 +263,13 @@ fn pixbuf_may_read(content_type: &str, declared: &HashSet<String>) -> bool {
 /// The preview `request` asks for, or `None` when the item keeps its icon.
 pub(crate) async fn preview(request: PreviewRequest) -> Option<gdk::Texture> {
     let key = request.key();
+    if let Some((pixels, texture)) = KEPT.with_borrow(|kept| kept.get(&key).cloned()) {
+        if pixels >= request.pixels {
+            return Some(texture);
+        }
+    }
     if request.local_only && is_on_network(&request.uri, request.target_uri.as_deref()).await {
         return None;
-    }
-    if let Some(texture) = KEPT.with_borrow(|kept| kept.get(&key).cloned()) {
-        return Some(texture);
     }
     let path = thumbnail_of(&request).await?;
     let pixels = request.pixels;
@@ -267,10 +280,15 @@ pub(crate) async fn preview(request: PreviewRequest) -> Option<gdk::Texture> {
         .flatten();
     let texture = texture?;
     KEPT.with_borrow_mut(|kept| {
-        if kept.len() >= MAX_KEPT {
+        if kept.len() >= MAX_KEPT && !kept.contains_key(&key) {
             kept.clear();
         }
-        kept.insert(key, texture.clone());
+        let should_store = kept
+            .get(&key)
+            .is_none_or(|(existing_pixels, _)| pixels >= *existing_pixels);
+        if should_store {
+            kept.insert(key, (pixels, texture.clone()));
+        }
     });
     Some(texture)
 }

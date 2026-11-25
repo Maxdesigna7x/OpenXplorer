@@ -73,18 +73,26 @@ impl FileCell {
     pub(crate) fn look_up_picture(&self, item: &FileItem, previews: PreviewPolicy) {
         self.cancel_picture_lookup();
         let imp = self.imp();
-        imp.custom_icon.set_visible(false);
         imp.folder_picture.show_texture(None);
-        imp.image.set_opacity(1.0);
         let entry = item.entry();
         let uri = entry.uri.clone();
         let size = imp.icon_size.get();
         let scale = self.scale_factor().max(1);
         let pixels = size * scale;
         let preview = previews.request(entry, pixels);
+        let cached = preview.as_ref().and_then(thumbnails::cached_preview);
+        if let Some((texture, _)) = &cached {
+            imp.custom_icon.set_paintable(Some(texture));
+            imp.custom_icon.set_visible(true);
+            imp.image.set_opacity(0.0);
+        } else {
+            imp.custom_icon.set_visible(false);
+            imp.image.set_opacity(1.0);
+        }
         if !uri.starts_with("file:") && preview.is_none() {
             return;
         }
+        let enough_cached = cached.is_some_and(|(_, enough)| enough);
         let is_folder = entry.is_dir;
         let on_the_folder = imp.is_tile.get() && imp.icon_size.get() >= SMALLEST_PICTURE_ICON;
         let cell = self.downgrade();
@@ -126,16 +134,18 @@ impl FileCell {
                 }
                 paintable = icon_texture(picture).await.map(|texture| texture.upcast());
             }
-            if paintable.is_none() {
+            if paintable.is_none() && !enough_cached {
                 if let Some(request) = preview {
                     paintable = thumbnails::preview(request).await.map(|texture| texture.upcast());
                 }
             }
-            if let (Some(cell), Some(paintable)) = (cell.upgrade(), paintable) {
+            if let Some(cell) = cell.upgrade() {
                 let imp = cell.imp();
-                imp.custom_icon.set_paintable(Some(&paintable));
-                imp.custom_icon.set_visible(true);
-                imp.image.set_opacity(0.0);
+                if let Some(paintable) = paintable {
+                    imp.custom_icon.set_paintable(Some(&paintable));
+                    imp.custom_icon.set_visible(true);
+                    imp.image.set_opacity(0.0);
+                }
                 imp.picture_lookup.take();
             }
         });
