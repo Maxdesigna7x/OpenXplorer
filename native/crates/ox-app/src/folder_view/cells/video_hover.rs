@@ -6,6 +6,11 @@
 //! Only one `gtk::MediaFile` is ever active across the application, and it is
 //! torn down immediately on pointer leave, scroll, zoom, or cell unbind so
 //! browsing and memory usage stay unaffected.
+//!
+//! Re-entrancy invariant: `ACTIVE` is NEVER held borrowed across any GTK or
+//! GStreamer call (`set_paintable`, `set_visible`, `play`, `pause`, `seek`,
+//! `clear`), and `stream.clear()` is deferred to an idle callback after all
+//! signal handlers are disconnected.
 
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
@@ -43,6 +48,7 @@ struct ActivePreview {
     token: u64,
     cell: glib::WeakRef<FileCell>,
     stream: gtk::MediaFile,
+    handlers: Vec<glib::SignalHandlerId>,
     swapped: bool,
     saved_paintable: Option<gdk::Paintable>,
     saved_visible: bool,
@@ -98,6 +104,9 @@ fn teardown(mut active: ActivePreview) {
     if let Some(timer) = active.timer.take() {
         timer.remove();
     }
+    for handler in active.handlers.drain(..) {
+        active.stream.disconnect(handler);
+    }
     active.stream.pause();
     if active.swapped {
         if let Some(cell) = active.cell.upgrade() {
@@ -112,7 +121,13 @@ fn teardown(mut active: ActivePreview) {
             }
         }
     }
-    active.stream.clear();
+    // Defer GStreamer pipeline teardown until the current GTK/GStreamer
+    // callback stack has unwound so rapid pointer leave/enter never races
+    // inside `GtkGstMediaFile`.
+    let stream = active.stream;
+    glib::idle_add_local_once(move || {
+        stream.clear();
+    });
 }
 
 /// Computes the seek offsets (in microseconds) for the preview segments.
@@ -210,33 +225,34 @@ impl FileCell {
         stream.set_volume(0.0);
         stream.set_loop(false);
 
+        let error_id = stream.connect_error_notify(move |stream| {
+            if stream.error().is_some() {
+                stop_if_token(token);
+            }
+        });
+        let ended_id = stream.connect_ended_notify(move |stream| {
+            if stream.is_ended() {
+                stop_if_token(token);
+            }
+        });
+        let prepared_id = stream.connect_prepared_notify(move |stream| {
+            if stream.is_prepared() {
+                begin_segments(token, stream);
+            }
+        });
+
         ACTIVE.with_borrow_mut(|slot| {
             *slot = Some(ActivePreview {
                 token,
                 cell: self.downgrade(),
                 stream: stream.clone(),
+                handlers: vec![error_id, ended_id, prepared_id],
                 swapped: false,
                 saved_paintable: None,
                 saved_visible: false,
                 saved_image_opacity: 1.0,
                 timer: None,
             });
-        });
-
-        stream.connect_error_notify(move |stream| {
-            if stream.error().is_some() {
-                stop_if_token(token);
-            }
-        });
-        stream.connect_ended_notify(move |stream| {
-            if stream.is_ended() {
-                stop_if_token(token);
-            }
-        });
-        stream.connect_prepared_notify(move |stream| {
-            if stream.is_prepared() {
-                begin_segments(token, stream);
-            }
         });
 
         if stream.is_prepared() {
@@ -255,29 +271,48 @@ fn begin_segments(token: u64, stream: &gtk::MediaFile) {
         return;
     }
     let segments = segment_starts_us(stream.duration(), stream.is_seekable());
-    let activated = ACTIVE.with_borrow_mut(|slot| {
+    let cell = ACTIVE.with_borrow_mut(|slot| {
+        let active = slot.as_mut().filter(|active| active.token == token)?;
+        if active.swapped {
+            return None;
+        }
+        let cell = active.cell.upgrade().filter(WidgetExt::is_mapped)?;
+        active.swapped = true;
+        Some(cell)
+    });
+    let Some(cell) = cell else {
+        return;
+    };
+
+    // Snapshot the current thumbnail state and store it before mutating any
+    // GTK widget properties, keeping `ACTIVE` unborrowed during GTK calls.
+    let imp = cell.imp();
+    let saved_paintable = imp.custom_icon.paintable();
+    let saved_visible = imp.custom_icon.is_visible();
+    let saved_image_opacity = imp.image.opacity();
+    let still_active = ACTIVE.with_borrow_mut(|slot| {
         let Some(active) = slot.as_mut().filter(|active| active.token == token) else {
             return false;
         };
-        if active.swapped {
-            return false;
-        }
-        let Some(cell) = active.cell.upgrade().filter(WidgetExt::is_mapped) else {
-            return false;
-        };
-        let imp = cell.imp();
-        active.saved_paintable = imp.custom_icon.paintable();
-        active.saved_visible = imp.custom_icon.is_visible();
-        active.saved_image_opacity = imp.image.opacity();
-        active.swapped = true;
-        imp.custom_icon.set_paintable(Some(stream));
-        imp.custom_icon.set_visible(true);
-        imp.image.set_opacity(0.0);
+        active.saved_paintable = saved_paintable;
+        active.saved_visible = saved_visible;
+        active.saved_image_opacity = saved_image_opacity;
         true
     });
-    if !activated {
+    if !still_active {
         return;
     }
+
+    imp.custom_icon.set_paintable(Some(stream));
+    imp.custom_icon.set_visible(true);
+    imp.image.set_opacity(0.0);
+
+    // Re-check token in case mutating widget visibility triggered a leave/unmap.
+    let still_active = ACTIVE.with_borrow(|slot| slot.as_ref().is_some_and(|a| a.token == token));
+    if !still_active {
+        return;
+    }
+
     stream.play();
     schedule_next_segment(token, segments, 1);
 }
@@ -299,26 +334,31 @@ fn schedule_next_segment(token: u64, segments: Vec<i64>, next_index: usize) {
             }
         });
         if let Some((stream, position_us)) = next_seek {
-            stream.seek(position_us);
-            stream.play();
-            schedule_next_segment(token, segments, next_index + 1);
+            if stream.is_prepared() && stream.is_seekable() && stream.error().is_none() {
+                stream.seek(position_us);
+                stream.play();
+                schedule_next_segment(token, segments, next_index + 1);
+            } else {
+                stop_if_token(token);
+            }
         } else {
             stop_if_token(token);
         }
     });
-    let stored = ACTIVE.with_borrow_mut(|slot| {
+    let replaced = ACTIVE.with_borrow_mut(|slot| {
         if let Some(active) = slot.as_mut().filter(|active| active.token == token) {
-            if let Some(previous) = active.timer.replace(timer) {
-                previous.remove();
-            }
-            true
+            Some(active.timer.replace(timer))
         } else {
-            false
+            None
         }
     });
-    if !stored {
-        // The preview stopped before we could store the timer; it will no-op
-        // when it fires because `token` no longer matches.
+    match replaced {
+        Some(Some(previous)) => previous.remove(),
+        Some(None) => {}
+        None => {
+            // The preview stopped before we could store the timer; it will
+            // no-op when it fires because `token` no longer matches.
+        }
     }
 }
 
