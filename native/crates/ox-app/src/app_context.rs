@@ -446,9 +446,19 @@ impl AppContext {
     /// window's details: the browsing windows do not redraw their places
     /// and folders for it.
     pub(crate) fn remember_preferences(&self, update: PreferencesUpdate) {
+        self.remember_preferences_with_reply(update, |_| {});
+    }
+
+    /// Like [`Self::remember_preferences`], while reporting any save failure
+    /// to `reply`.
+    pub(crate) fn remember_preferences_with_reply(
+        &self,
+        update: PreferencesUpdate,
+        reply: impl FnOnce(Result<(), SettingsError>) + 'static,
+    ) {
         let change: Change =
             Box::new(move |settings: &mut Settings| settings.update_preferences(&update).map(|_| ()));
-        self.settings().change(change, Box::new(|_| {}));
+        self.settings().change(change, Box::new(reply));
     }
 
     /// Queues `change` off the main thread, in turn with every other
@@ -471,6 +481,22 @@ impl AppContext {
             settings.remember_view(&uri, properties, scope).map(|_| ())
         });
         self.change_settings(change, reply);
+    }
+
+    /// Saves `properties` as the display style of `uri` with `scope` off
+    /// the main thread without emitting `places-changed`, so an interactive
+    /// zoom does not trigger a full window places redraw mid-animation.
+    pub(crate) fn remember_view_silently(
+        &self,
+        uri: String,
+        properties: ViewProperties,
+        scope: ViewScope,
+        reply: impl FnOnce(Result<(), SettingsError>) + 'static,
+    ) {
+        let change: Change = Box::new(move |settings: &mut Settings| {
+            settings.remember_view(&uri, properties, scope).map(|_| ())
+        });
+        self.settings().change(change, Box::new(reply));
     }
 
     /// Optimizes the folder at `uri` for `template`, and its sub-folders

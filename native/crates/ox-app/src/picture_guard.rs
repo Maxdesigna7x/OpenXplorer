@@ -219,6 +219,7 @@ fn decode_read_to_fit(
             if let Some(refusal) = refusal_by_header(declared, limits) {
                 break Err(refusal);
             }
+            sanitize_pixel_density(&mut first);
             held = first;
             &held[..]
         } else {
@@ -294,6 +295,251 @@ fn refusal_for(cancellable: Option<&gio::Cancellable>) -> Refusal {
         Refusal::Cancelled
     } else {
         Refusal::Unreadable
+    }
+}
+
+/// Replaces zero, negative, or divide-by-zero (`0/0` = NaN, `n/0`)
+/// pixel-density values in the in-memory header buffer before `gdk-pixbuf`
+/// sees the bytes.
+///
+/// `glycin-core` 4.0.3 (shipped in GNOME 51) panics across an FFI boundary in
+/// `gly_frame_details_get_pixel_density` when `GlyPixelDensity::x-value` or
+/// `y-value` is invalid or out of range, aborting the entire process. Because
+/// image thumbnails, video previews, document previews, and cached thumbnails
+/// all decode through `picture_guard`, sanitizing here protects every preview
+/// path without touching the files on disk.
+fn sanitize_pixel_density(bytes: &mut [u8]) {
+    if bytes.starts_with(&[0xFF, 0xD8]) {
+        sanitize_jpeg_density(bytes);
+    } else if bytes.starts_with(b"II\x2A\x00") || bytes.starts_with(b"MM\x00\x2A") {
+        sanitize_tiff_density(bytes);
+    } else if bytes.starts_with(PNG_SIGNATURE) {
+        sanitize_png_density(bytes);
+    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        sanitize_webp_density(bytes);
+    } else if bytes.starts_with(b"BM") {
+        sanitize_bmp_density(bytes);
+    }
+}
+
+/// Patches zero JFIF densities and invalid EXIF `XResolution`/`YResolution`
+/// rationals inside a JPEG's header segments.
+fn sanitize_jpeg_density(bytes: &mut [u8]) {
+    let mut pos = 2;
+    while pos + 2 <= bytes.len() {
+        while pos < bytes.len() && bytes[pos] != 0xFF {
+            pos += 1;
+        }
+        while pos < bytes.len() && bytes[pos] == 0xFF {
+            pos += 1;
+        }
+        if pos >= bytes.len() {
+            break;
+        }
+        let marker = bytes[pos];
+        pos += 1;
+        if marker == 0xD9 || marker == 0xDA {
+            break;
+        }
+        if matches!(marker, 0x01 | 0xD0..=0xD8) {
+            continue;
+        }
+        if pos + 2 > bytes.len() {
+            break;
+        }
+        let seg_len = usize::from(u16::from_be_bytes([bytes[pos], bytes[pos + 1]]));
+        if seg_len < 2 || pos + seg_len > bytes.len() {
+            break;
+        }
+        let payload = &mut bytes[pos + 2..pos + seg_len];
+        if marker == 0xE0 && payload.len() >= 12 && payload.starts_with(b"JFIF\0") {
+            let x = u16::from_be_bytes([payload[8], payload[9]]);
+            let y = u16::from_be_bytes([payload[10], payload[11]]);
+            if x == 0 {
+                payload[8..10].copy_from_slice(&72_u16.to_be_bytes());
+            }
+            if y == 0 {
+                payload[10..12].copy_from_slice(&72_u16.to_be_bytes());
+            }
+        } else if marker == 0xE1 && payload.len() >= 14 && payload.starts_with(b"Exif\0\0") {
+            sanitize_tiff_density(&mut payload[6..]);
+        }
+        pos += seg_len;
+    }
+}
+
+/// Patches zero, negative, or divide-by-zero TIFF `XResolution` (`0x011A`)
+/// and `YResolution` (`0x011B`) `RATIONAL` / `SRATIONAL` entries to `72/1`.
+/// Returns `true` if any byte was modified.
+fn sanitize_tiff_density(tiff: &mut [u8]) -> bool {
+    let little = if tiff.starts_with(b"II\x2A\x00") {
+        true
+    } else if tiff.starts_with(b"MM\x00\x2A") {
+        false
+    } else {
+        return false;
+    };
+    if tiff.len() < 8 {
+        return false;
+    }
+    let read_u16 = |buf: &[u8], off: usize| -> Option<u16> {
+        let pair: [u8; 2] = buf.get(off..off + 2)?.try_into().ok()?;
+        Some(if little {
+            u16::from_le_bytes(pair)
+        } else {
+            u16::from_be_bytes(pair)
+        })
+    };
+    let read_u32 = |buf: &[u8], off: usize| -> Option<u32> {
+        let quad: [u8; 4] = buf.get(off..off + 4)?.try_into().ok()?;
+        Some(if little {
+            u32::from_le_bytes(quad)
+        } else {
+            u32::from_be_bytes(quad)
+        })
+    };
+    let write_u32 = |buf: &mut [u8], off: usize, value: u32| {
+        if let Some(slot) = buf.get_mut(off..off + 4) {
+            slot.copy_from_slice(&if little {
+                value.to_le_bytes()
+            } else {
+                value.to_be_bytes()
+            });
+        }
+    };
+
+    let mut modified = false;
+    let mut ifd_off = read_u32(tiff, 4).and_then(|off| usize::try_from(off).ok());
+    for _ in 0..4 {
+        let Some(off) = ifd_off else { break };
+        let Some(entries) = read_u16(tiff, off).map(usize::from) else {
+            break;
+        };
+        let capped = entries.min(256);
+        for index in 0..capped {
+            let entry_off = off + 2 + index * 12;
+            let (Some(tag), Some(typ), Some(count), Some(val_off)) = (
+                read_u16(tiff, entry_off),
+                read_u16(tiff, entry_off + 2),
+                read_u32(tiff, entry_off + 4),
+                read_u32(tiff, entry_off + 8).and_then(|v| usize::try_from(v).ok()),
+            ) else {
+                break;
+            };
+            if matches!(tag, 0x011A | 0x011B) && matches!(typ, 5 | 10) && count >= 1 {
+                if let (Some(num), Some(den)) = (read_u32(tiff, val_off), read_u32(tiff, val_off + 4)) {
+                    let invalid = if typ == 10 {
+                        i32::from_ne_bytes(num.to_ne_bytes()) <= 0
+                            || i32::from_ne_bytes(den.to_ne_bytes()) <= 0
+                    } else {
+                        num == 0 || den == 0
+                    };
+                    if invalid {
+                        write_u32(tiff, val_off, 72);
+                        write_u32(tiff, val_off + 4, 1);
+                        modified = true;
+                    }
+                }
+            }
+        }
+        let next = read_u32(tiff, off + 2 + entries * 12).and_then(|next| usize::try_from(next).ok());
+        ifd_off = next.filter(|&next| next > off);
+    }
+    modified
+}
+
+/// Patches zero PNG `pHYs` densities and invalid TIFF densities inside PNG
+/// `eXIf` chunks, updating each modified chunk's CRC32 so libpng accepts it.
+fn sanitize_png_density(bytes: &mut [u8]) {
+    let mut pos = PNG_SIGNATURE.len();
+    while pos + 12 <= bytes.len() {
+        let len = u32::from_be_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]]) as usize;
+        let Some(end) = pos.checked_add(12).and_then(|base| base.checked_add(len)) else {
+            break;
+        };
+        if end > bytes.len() {
+            break;
+        }
+        let tag = [bytes[pos + 4], bytes[pos + 5], bytes[pos + 6], bytes[pos + 7]];
+        if &tag == b"IEND" {
+            break;
+        }
+        let mut modified = false;
+        if &tag == b"pHYs" && len == 9 {
+            let payload = &mut bytes[pos + 8..pos + 8 + len];
+            let x = u32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]]);
+            let y = u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]);
+            if x == 0 {
+                payload[0..4].copy_from_slice(&2835_u32.to_be_bytes());
+                modified = true;
+            }
+            if y == 0 {
+                payload[4..8].copy_from_slice(&2835_u32.to_be_bytes());
+                modified = true;
+            }
+        } else if &tag == b"eXIf" && len >= 8 {
+            modified = sanitize_tiff_density(&mut bytes[pos + 8..pos + 8 + len]);
+        }
+        if modified {
+            let crc = png_crc32(&bytes[pos + 4..pos + 8 + len]);
+            bytes[pos + 8 + len..end].copy_from_slice(&crc.to_be_bytes());
+        }
+        pos = end;
+    }
+}
+
+/// IEEE 802.3 CRC32 used by PNG chunks.
+fn png_crc32(data: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFF_u32;
+    for &byte in data {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+        }
+    }
+    !crc
+}
+
+/// Patches invalid TIFF densities inside an extended WebP `EXIF` chunk.
+fn sanitize_webp_density(bytes: &mut [u8]) {
+    let mut pos = 12;
+    while pos + 8 <= bytes.len() {
+        let tag = [bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]];
+        let len =
+            u32::from_le_bytes([bytes[pos + 4], bytes[pos + 5], bytes[pos + 6], bytes[pos + 7]]) as usize;
+        let Some(end) = pos.checked_add(8).and_then(|base| base.checked_add(len)) else {
+            break;
+        };
+        if end > bytes.len() {
+            break;
+        }
+        if &tag == b"EXIF" {
+            let payload = &mut bytes[pos + 8..end];
+            if payload.starts_with(b"Exif\0\0") {
+                sanitize_tiff_density(&mut payload[6..]);
+            } else {
+                sanitize_tiff_density(payload);
+            }
+        }
+        pos = end.saturating_add(len & 1);
+    }
+}
+
+/// Replaces negative BMP `biXPelsPerMeter` / `biYPelsPerMeter` values with 0.
+fn sanitize_bmp_density(bytes: &mut [u8]) {
+    if bytes.len() < 46 {
+        return;
+    }
+    let dib_size = u32::from_le_bytes([bytes[14], bytes[15], bytes[16], bytes[17]]);
+    if dib_size < 40 {
+        return;
+    }
+    for off in [38, 42] {
+        let value = i32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]]);
+        if value < 0 {
+            bytes[off..off + 4].copy_from_slice(&0_i32.to_le_bytes());
+        }
     }
 }
 
@@ -1456,5 +1702,127 @@ mod tests {
         assert_eq!(fit_within(600, 1200, (220, 146)), (73, 146));
         assert_eq!(fit_within(30_000, 1, (256, 256)), (256, 1), "at least a pixel");
         assert_eq!(fit_within(1, 1, (256, 256)), (256, 256));
+    }
+
+    fn tiff_with_zero_density() -> Vec<u8> {
+        let mut tiff = b"II\x2A\x00".to_vec();
+        tiff.extend_from_slice(&8_u32.to_le_bytes());
+        tiff.extend_from_slice(&2_u16.to_le_bytes());
+        let x_val_off = 8_u32 + 2 + 2 * 12 + 4;
+        let y_val_off = x_val_off + 8;
+        tiff.extend_from_slice(&0x011A_u16.to_le_bytes());
+        tiff.extend_from_slice(&5_u16.to_le_bytes());
+        tiff.extend_from_slice(&1_u32.to_le_bytes());
+        tiff.extend_from_slice(&x_val_off.to_le_bytes());
+        tiff.extend_from_slice(&0x011B_u16.to_le_bytes());
+        tiff.extend_from_slice(&5_u16.to_le_bytes());
+        tiff.extend_from_slice(&1_u32.to_le_bytes());
+        tiff.extend_from_slice(&y_val_off.to_le_bytes());
+        tiff.extend_from_slice(&0_u32.to_le_bytes());
+        tiff.extend_from_slice(&0_u32.to_le_bytes());
+        tiff.extend_from_slice(&0_u32.to_le_bytes());
+        tiff.extend_from_slice(&0_u32.to_le_bytes());
+        tiff.extend_from_slice(&0_u32.to_le_bytes());
+        tiff
+    }
+
+    #[test]
+    fn zero_and_nan_jpeg_exif_densities_are_sanitized_in_memory() {
+        let mut jpeg = vec![0xFF, 0xD8];
+        let mut app0 = b"JFIF\0\x01\x01\x01".to_vec();
+        app0.extend_from_slice(&0_u16.to_be_bytes());
+        app0.extend_from_slice(&0_u16.to_be_bytes());
+        app0.extend_from_slice(&[0, 0]);
+        jpeg.extend_from_slice(&[0xFF, 0xE0]);
+        jpeg.extend_from_slice(&(u16::try_from(app0.len() + 2).unwrap()).to_be_bytes());
+        jpeg.extend_from_slice(&app0);
+
+        let tiff = tiff_with_zero_density();
+        let mut app1 = b"Exif\0\0".to_vec();
+        app1.extend_from_slice(&tiff);
+        jpeg.extend_from_slice(&[0xFF, 0xE1]);
+        jpeg.extend_from_slice(&(u16::try_from(app1.len() + 2).unwrap()).to_be_bytes());
+        jpeg.extend_from_slice(&app1);
+        jpeg.extend_from_slice(&[0xFF, 0xD9]);
+
+        sanitize_pixel_density(&mut jpeg);
+
+        assert_eq!(u16::from_be_bytes([jpeg[14], jpeg[15]]), 72);
+        assert_eq!(u16::from_be_bytes([jpeg[16], jpeg[17]]), 72);
+        let exif_start = 2 + 4 + app0.len() + 4 + 6;
+        let x_off = exif_start + 38;
+        let y_off = exif_start + 46;
+        assert_eq!(u32::from_le_bytes(jpeg[x_off..x_off + 4].try_into().unwrap()), 72);
+        assert_eq!(
+            u32::from_le_bytes(jpeg[x_off + 4..x_off + 8].try_into().unwrap()),
+            1
+        );
+        assert_eq!(u32::from_le_bytes(jpeg[y_off..y_off + 4].try_into().unwrap()), 72);
+        assert_eq!(
+            u32::from_le_bytes(jpeg[y_off + 4..y_off + 8].try_into().unwrap()),
+            1
+        );
+    }
+
+    #[test]
+    fn png_webp_and_bmp_invalid_densities_are_sanitized_in_memory() {
+        // PNG with zero pHYs and 0/0 eXIf
+        let mut png = PNG_SIGNATURE.to_vec();
+        let phys = [0, 0, 0, 0, 0, 0, 0, 0, 1];
+        let phys_start = png.len();
+        png.extend_from_slice(&9_u32.to_be_bytes());
+        png.extend_from_slice(b"pHYs");
+        png.extend_from_slice(&phys);
+        png.extend_from_slice(&png_crc32(&png[phys_start + 4..]).to_be_bytes());
+
+        let tiff = tiff_with_zero_density();
+        let exif_start = png.len();
+        png.extend_from_slice(&(u32::try_from(tiff.len()).unwrap()).to_be_bytes());
+        png.extend_from_slice(b"eXIf");
+        png.extend_from_slice(&tiff);
+        png.extend_from_slice(&png_crc32(&png[exif_start + 4..]).to_be_bytes());
+
+        sanitize_pixel_density(&mut png);
+        assert_eq!(
+            u32::from_be_bytes(png[phys_start + 8..phys_start + 12].try_into().unwrap()),
+            2835
+        );
+        assert_eq!(
+            u32::from_be_bytes(png[phys_start + 17..phys_start + 21].try_into().unwrap()),
+            png_crc32(&png[phys_start + 4..phys_start + 17])
+        );
+        assert_eq!(
+            u32::from_le_bytes(png[exif_start + 8 + 38..exif_start + 8 + 42].try_into().unwrap()),
+            72
+        );
+        let exif_end = exif_start + 8 + tiff.len();
+        assert_eq!(
+            u32::from_be_bytes(png[exif_end..exif_end + 4].try_into().unwrap()),
+            png_crc32(&png[exif_start + 4..exif_end])
+        );
+
+        // WebP with EXIF 0/0
+        let mut webp = b"RIFF".to_vec();
+        webp.extend_from_slice(&0_u32.to_le_bytes());
+        webp.extend_from_slice(b"WEBP");
+        webp.extend_from_slice(b"EXIF");
+        webp.extend_from_slice(&(u32::try_from(tiff.len()).unwrap()).to_le_bytes());
+        let webp_tiff = webp.len();
+        webp.extend_from_slice(&tiff);
+        sanitize_pixel_density(&mut webp);
+        assert_eq!(
+            u32::from_le_bytes(webp[webp_tiff + 38..webp_tiff + 42].try_into().unwrap()),
+            72
+        );
+
+        // BMP with negative pixels-per-meter
+        let mut bmp = vec![0_u8; 54];
+        bmp[0..2].copy_from_slice(b"BM");
+        bmp[14..18].copy_from_slice(&40_u32.to_le_bytes());
+        bmp[38..42].copy_from_slice(&(-100_i32).to_le_bytes());
+        bmp[42..46].copy_from_slice(&(-200_i32).to_le_bytes());
+        sanitize_pixel_density(&mut bmp);
+        assert_eq!(i32::from_le_bytes(bmp[38..42].try_into().unwrap()), 0);
+        assert_eq!(i32::from_le_bytes(bmp[42..46].try_into().unwrap()), 0);
     }
 }

@@ -288,6 +288,7 @@ impl CellOwners {
     /// Looks up the custom icon of the item at `uri` again in every cell
     /// that shows it (PROP-016).
     pub(crate) fn refresh_custom_icon(&self, uri: &str) {
+        super::custom_icon::forget_own_pictures(uri);
         self.look_up_pictures(|item| item.entry().uri == uri);
     }
 

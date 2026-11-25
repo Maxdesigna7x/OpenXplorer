@@ -54,10 +54,15 @@ fn decoding_slots() -> usize {
     let cpus = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
     cpus.saturating_sub(2).clamp(1, 6)
 }
-/// How many thumbnails are made at a time.
-const MAKING_AT_ONCE: usize = 2;
-/// How many decoded previews are kept.
-const MAX_KEPT: usize = 512;
+/// How many thumbnails are made at a time, leaving cores free for the UI.
+fn making_slots() -> usize {
+    let cpus = std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get);
+    cpus.saturating_sub(2).clamp(2, 4)
+}
+/// How many decoded previews are kept (one highest-resolution texture per item version).
+const MAX_KEPT: usize = 1024;
+/// How many parent directories are remembered for local-vs-network filesystem checks.
+const MAX_NETWORK_DIRS: usize = 256;
 
 /// Which items of the folder shown get previews.
 #[expect(
@@ -171,8 +176,8 @@ fn stands_for(entry: &Entry) -> Option<&str> {
         .or(entry.target_uri.as_deref())
 }
 
-/// A decoded preview's item, version and size.
-type PreviewKey = (String, Option<u64>, i32);
+/// A decoded preview's item and version.
+type PreviewKey = (String, Option<u64>);
 
 /// What a preview is wanted of.
 #[derive(Debug, Clone)]
@@ -212,23 +217,37 @@ impl PreviewRequest {
     }
 
     fn key(&self) -> PreviewKey {
-        (self.uri.clone(), self.modified, self.pixels)
+        (self.uri.clone(), self.modified)
     }
 }
 
 thread_local! {
     static DECODING: Rc<Slots> = Rc::new(Slots::new(decoding_slots()));
-    static MAKING: Rc<Slots> = Rc::new(Slots::new(MAKING_AT_ONCE));
-    /// Decoded previews by item, version and size.
-    static KEPT: RefCell<HashMap<PreviewKey, gdk::Texture>> = RefCell::new(HashMap::new());
+    static MAKING: Rc<Slots> = Rc::new(Slots::new(making_slots()));
+    /// Decoded previews by item and version, keeping the highest resolution
+    /// decoded so far so zooming reuses sharp textures without flashing icons.
+    static KEPT: RefCell<HashMap<PreviewKey, (i32, gdk::Texture)>> = RefCell::new(HashMap::new());
     /// Item versions no thumbnail could be made of in this run.
     static FAILED: RefCell<HashSet<(String, Option<u64>)>> = RefCell::new(HashSet::new());
+    /// Parent directories already checked for network filesystems.
+    static NETWORK_DIRS: RefCell<HashMap<PathBuf, bool>> = RefCell::new(HashMap::new());
     /// The types gdk-pixbuf's loaders declare they read.
     static PIXBUF_TYPES: HashSet<String> = Pixbuf::formats()
         .iter()
         .flat_map(PixbufFormat::mime_types)
         .map(|mime| mime.to_string())
         .collect();
+}
+
+/// Returns an already-decoded preview from memory for `request` synchronously,
+/// along with whether its resolution already satisfies `request.pixels`.
+pub(crate) fn cached_preview(request: &PreviewRequest) -> Option<(gdk::Texture, bool)> {
+    let key = request.key();
+    let wanted = request.pixels.min(ThumbnailFlavor::Large.pixels());
+    KEPT.with_borrow(|kept| {
+        kept.get(&key)
+            .map(|(covered, texture)| (texture.clone(), *covered >= wanted))
+    })
 }
 
 /// Whether gdk-pixbuf may be asked to decode the item of `content_type`,
@@ -252,34 +271,57 @@ fn pixbuf_may_read(content_type: &str, declared: &HashSet<String>) -> bool {
 /// The preview `request` asks for, or `None` when the item keeps its icon.
 pub(crate) async fn preview(request: PreviewRequest) -> Option<gdk::Texture> {
     let key = request.key();
+    let wanted = request.pixels.min(ThumbnailFlavor::Large.pixels());
+    if let Some((covered, texture)) = KEPT.with_borrow(|kept| kept.get(&key).cloned()) {
+        if covered >= wanted {
+            return Some(texture);
+        }
+    }
     if request.local_only && is_on_network(&request.uri, request.target_uri.as_deref()).await {
         return None;
     }
-    if let Some(texture) = KEPT.with_borrow(|kept| kept.get(&key).cloned()) {
-        return Some(texture);
-    }
     let path = thumbnail_of(&request).await?;
-    let pixels = request.pixels;
+    let is_large = is_large_thumbnail_path(&path);
     let texture = DECODING
         .with(Rc::clone)
-        .blocking(move |_| decode(&path, pixels))
+        .blocking(move |_| decode(&path))
         .await
         .flatten();
     let texture = texture?;
+    let actual_edge = texture.width().max(texture.height());
+    let covered = if is_large {
+        ThumbnailFlavor::Large.pixels()
+    } else {
+        actual_edge.max(ThumbnailFlavor::Normal.pixels())
+    };
     KEPT.with_borrow_mut(|kept| {
-        if kept.len() >= MAX_KEPT {
+        if kept.len() >= MAX_KEPT && !kept.contains_key(&key) {
             kept.clear();
         }
-        kept.insert(key, texture.clone());
+        let should_store = kept
+            .get(&key)
+            .is_none_or(|(existing_covered, _)| covered >= *existing_covered);
+        if should_store {
+            kept.insert(key, (covered, texture.clone()));
+        }
     });
     Some(texture)
+}
+
+/// Whether `path` lives in a `large` (256 px) or larger thumbnail cache folder.
+fn is_large_thumbnail_path(path: &Path) -> bool {
+    path.parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .is_some_and(|folder| matches!(folder, "large" | "x-large" | "xx-large"))
 }
 
 /// Whether the item at `uri`, or the file `target` it stands for, is on a
 /// network file system, asked off the main thread, which a server that
 /// does not answer would hold up. A URI without a local path is left to
 /// [`PreviewPolicy::allows`], which tells servers and devices by their
-/// URIs.
+/// URIs. Results are cached by parent directory so a folder of hundreds of
+/// local files only checks its mount once.
 async fn is_on_network(uri: &str, target: Option<&str>) -> bool {
     let paths: Vec<PathBuf> = std::iter::once(uri)
         .chain(target)
@@ -288,17 +330,55 @@ async fn is_on_network(uri: &str, target: Option<&str>) -> bool {
     if paths.is_empty() {
         return false;
     }
-    gio::spawn_blocking(move || {
-        paths
-            .iter()
-            .any(|path| network_fs::is_on_network_filesystem(path))
+    let mut uncached = Vec::new();
+    let cached_hit = NETWORK_DIRS.with_borrow(|cache| {
+        for path in &paths {
+            let dir = path.parent().unwrap_or(path);
+            if let Some(&remote) = cache.get(dir) {
+                if remote {
+                    return true;
+                }
+            } else {
+                uncached.push((dir.to_path_buf(), path.clone()));
+            }
+        }
+        false
+    });
+    if cached_hit {
+        return true;
+    }
+    if uncached.is_empty() {
+        return false;
+    }
+    let checked = gio::spawn_blocking(move || {
+        uncached
+            .into_iter()
+            .map(|(dir, path)| (dir, network_fs::is_on_network_filesystem(&path)))
+            .collect::<Vec<_>>()
     })
-    .await
-    .unwrap_or(true)
+    .await;
+    let Ok(results) = checked else {
+        return true;
+    };
+    let mut any_remote = false;
+    NETWORK_DIRS.with_borrow_mut(|cache| {
+        if cache.len() >= MAX_NETWORK_DIRS {
+            cache.clear();
+        }
+        for (dir, remote) in results {
+            any_remote |= remote;
+            cache.insert(dir, remote);
+        }
+    });
+    any_remote
 }
 
-/// The cached thumbnail of the item, made first if it is missing.
+/// The cached thumbnail of the item, made first if it is missing. When the
+/// caller needs more than 128 px (`Large`) and GIO only finds a 128 px
+/// `normal` thumbnail, it upgrades to `Large` (256 px) and falls back to the
+/// `normal` file if generating `Large` fails.
 async fn thumbnail_of(request: &PreviewRequest) -> Option<PathBuf> {
+    let wants_large = request.pixels > ThumbnailFlavor::Normal.pixels();
     let file = gio::File::for_uri(&request.uri);
     let info = file
         .query_info_future(
@@ -308,27 +388,34 @@ async fn thumbnail_of(request: &PreviewRequest) -> Option<PathBuf> {
         )
         .await
         .ok();
-    match info.as_ref().map(cached_thumbnail) {
-        Some(CachedThumbnail::Valid(path)) => return Some(path),
+    let fallback_normal = match info.as_ref().map(cached_thumbnail) {
+        Some(CachedThumbnail::Valid(path)) => {
+            if !wants_large || is_large_thumbnail_path(&path) {
+                return Some(path);
+            }
+            Some(path)
+        }
         Some(CachedThumbnail::Failed) => return None,
-        Some(CachedThumbnail::Missing) | None => {}
-    }
+        Some(CachedThumbnail::Missing) | None => None,
+    };
     if request.existing_only {
-        return None;
+        return fallback_normal;
     }
     let version = (request.uri.clone(), request.modified);
     if FAILED.with_borrow(|failed| failed.contains(&version)) {
-        return None;
+        return fallback_normal;
     }
     match make_thumbnail(request).await {
         Ok(path) => Some(path),
         Err(Missing::Failed) => {
-            FAILED.with_borrow_mut(|failed| failed.insert(version));
-            None
+            if fallback_normal.is_none() {
+                FAILED.with_borrow_mut(|failed| failed.insert(version));
+            }
+            fallback_normal
         }
         // Asked again next time: the user may turn them back on, or the
         // disk be less busy.
-        Err(Missing::TurnedOff | Missing::Later) => None,
+        Err(Missing::TurnedOff | Missing::Later) => fallback_normal,
     }
 }
 
@@ -350,7 +437,9 @@ enum Missing {
 /// when it supports the type, else by gdk-pixbuf for a picture, else by
 /// the desktop's own thumbnailer for the type when it installs one.
 async fn make_thumbnail(request: &PreviewRequest) -> Result<PathBuf, Missing> {
-    let flavor = ThumbnailFlavor::for_pixels(request.pixels);
+    // Always generate Large (256 px) thumbnails so zooming up to Extra Large
+    // stays sharp without generating the same item twice.
+    let flavor = ThumbnailFlavor::Large;
     let cache_dir = glib::user_cache_dir();
     // The cache's own pictures keep their icons: a thumbnail of a
     // thumbnail would grow the cache from itself, so nothing is read, made
@@ -552,13 +641,15 @@ async fn by_thumbnailer(
         .unwrap_or(Err(Missing::Failed))
 }
 
-/// The thumbnail at `path`, scaled to fit `pixels` square; `None` for a
-/// file in the cache that is not a sensible thumbnail (more than the
-/// largest standard size, damaged, or slow to read), so the item keeps
-/// its icon.
-fn decode(path: &std::path::Path, pixels: i32) -> Option<gdk::Texture> {
+/// The thumbnail at `path`, decoded up to `Large` (256 px) so zooming across
+/// icon sizes never upscales a tiny pre-shrunk texture; `None` for a file in
+/// the cache that is not a sensible thumbnail (more than the largest standard
+/// size, damaged, or slow to read), so the item keeps its icon.
+fn decode(path: &std::path::Path) -> Option<gdk::Texture> {
     let file = gio::File::for_path(path);
-    let decoded = picture_guard::decode_to_fit(&file, pixels, pixels, Limits::THUMBNAIL_FILE, None).ok()?;
+    let max_edge = ThumbnailFlavor::Large.pixels();
+    let decoded =
+        picture_guard::decode_to_fit(&file, max_edge, max_edge, Limits::THUMBNAIL_FILE, None).ok()?;
     Some(gdk::Texture::for_pixbuf(&decoded.pixbuf))
 }
 

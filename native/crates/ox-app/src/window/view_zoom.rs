@@ -91,7 +91,7 @@ impl BrowserWindow {
         if let Some(animation) = animation {
             pane.animate_zoom(animation);
         }
-        self.remember_style();
+        self.remember_zoom_style();
         if let Some(position) = kept {
             glib::idle_add_local_once(glib::clone!(
                 #[weak]

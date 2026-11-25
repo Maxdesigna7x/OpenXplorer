@@ -70,7 +70,7 @@ mod imp {
     use gtk::prelude::*;
     use gtk::subclass::prelude::*;
 
-    use super::{branches::Branches, HiddenRow, MenuPopover, Section, SidebarEntry};
+    use super::{branches::Branches, row::RowLook, HiddenRow, MenuPopover, Section, SidebarEntry};
 
     /// Private state of [`super::Sidebar`].
     #[derive(Debug, Default)]
@@ -95,6 +95,8 @@ mod imp {
         /// Mounted drives show a capacity bar under their name (SIDE-018),
         /// with Settings' "Show more items in the navigation pane".
         pub(super) capacity_bars: Cell<bool>,
+        /// The look the current widgets in `list` were built with.
+        pub(super) drawn_look: Cell<Option<RowLook>>,
         /// Which rows show something hidden, in row order (SIDE-010).
         pub(super) hidden_rows: RefCell<Vec<HiddenRow>>,
         /// Whether anything is hidden, which "Show all entries" lists.
@@ -543,17 +545,24 @@ impl Sidebar {
         // The header function reads the entries as the rows are added.
         self.imp().entries.replace(entries);
         self.imp().hidden_rows.replace(Vec::new());
+        self.imp().drawn_look.set(Some(self.row_look()));
         for row in &rows {
             list.append(row);
         }
     }
 
     /// Replaces the rows with `rows`, dimming the hidden ones shown, and
-    /// records whether `anything_hidden` (SIDE-010).
+    /// records whether `anything_hidden` (SIDE-010). Unchanged rows with the
+    /// same visual look are kept in place so mounted drives do not re-measure
+    /// and flicker their capacity bars.
     pub(super) fn set_rows(&self, rows: Vec<(SidebarEntry, HiddenRow)>, anything_hidden: bool) {
-        self.imp().base_rows.replace(rows);
+        let imp = self.imp();
+        imp.anything_hidden.set(anything_hidden);
+        if imp.drawn_look.get() == Some(self.row_look()) && *imp.base_rows.borrow() == rows {
+            return;
+        }
+        imp.base_rows.replace(rows);
         self.rebuild_branches();
-        self.imp().anything_hidden.set(anything_hidden);
     }
 
     /// Redraws the one row that goes to the same place as `entry` as

@@ -48,6 +48,13 @@ pub(in crate::window) struct Zoom {
     tick: Option<gtk::TickCallbackId>,
 }
 
+struct VisibleCell {
+    item: FileItem,
+    position: u32,
+    rect: graphene::Rect,
+    cell: gtk::Widget,
+}
+
 impl FolderPane {
     pub(in crate::window) fn capture_zoom(&self, duration_ms: u32) -> Option<Zoom> {
         if self.page() != Some(PanePage::Listing)
@@ -57,6 +64,7 @@ impl FolderPane {
             return None;
         }
         let bounds = self.bounds_for_zoom()?;
+        let retargeting = self.imp().zoom.borrow().is_some();
         let before = self
             .imp()
             .zoom
@@ -67,15 +75,24 @@ impl FolderPane {
         if before.is_empty() {
             return None;
         }
-        let snapshot = gtk::Snapshot::new();
-        gtk::WidgetPaintable::new(Some(self)).snapshot(
-            &snapshot,
-            f64::from(bounds.width()),
-            f64::from(bounds.height()),
-        );
+        let before_frame = if retargeting {
+            let snapshot = gtk::Snapshot::new();
+            gtk::WidgetPaintable::new(Some(self)).snapshot(
+                &snapshot,
+                f64::from(bounds.width()),
+                f64::from(bounds.height()),
+            );
+            snapshot.to_node()
+        } else {
+            self.first_child().and_then(|child| {
+                let snapshot = gtk::Snapshot::new();
+                self.snapshot_child(&child, &snapshot);
+                snapshot.to_node()
+            })
+        };
         Some(Zoom {
             before,
-            before_frame: snapshot.to_node(),
+            before_frame,
             reflow: OnceCell::new(),
             started: Cell::new(None),
             duration_us: i64::from(duration_ms) * 1_000,
@@ -87,6 +104,9 @@ impl FolderPane {
 
     pub(in crate::window) fn animate_zoom(&self, mut zoom: Zoom) {
         self.stop_zoom_animation();
+        if zoom.first_frame_us == 0 {
+            zoom.first_frame_us = self.first_frame_step_us(zoom.duration_us);
+        }
         zoom.tick = Some(self.add_tick_callback(|pane, clock| {
             let keep_going = pane.imp().zoom.borrow().as_ref().is_some_and(|zoom| {
                 pane.settings().is_gtk_enable_animations()
@@ -112,13 +132,14 @@ impl FolderPane {
         // During a live resize a new target can arrive every frame. Give
         // each target one frame of movement so that tiles keep following
         // the window edge while the pointer is still moving.
-        if let Some(clock) = self.frame_clock() {
-            zoom.first_frame_us = clock
-                .refresh_info(clock.frame_time())
-                .0
-                .clamp(0, zoom.duration_us / 2);
-        }
+        zoom.first_frame_us = self.first_frame_step_us(zoom.duration_us);
         self.animate_zoom(zoom);
+    }
+
+    fn first_frame_step_us(&self, duration_us: i64) -> i64 {
+        self.frame_clock().map_or(0, |clock| {
+            clock.refresh_info(clock.frame_time()).0.clamp(0, duration_us / 2)
+        })
     }
 
     pub(in crate::window) fn stop_zoom_animation(&self) {
@@ -157,10 +178,10 @@ impl FolderPane {
         viewport
     }
 
-    fn visible_zoom_tiles(&self, viewport: &graphene::Rect) -> Vec<Tile> {
+    fn visible_zoom_cells(&self, viewport: &graphene::Rect) -> Vec<VisibleCell> {
         let view = self.view_widget();
         let details = self.view() == FolderView::Details;
-        let mut tiles: Vec<_> = self
+        let mut cells: Vec<_> = self
             .owners()
             .shown_items(&view)
             .into_iter()
@@ -176,22 +197,33 @@ impl FolderPane {
                     return None;
                 }
                 let item = self.model().item(position)?;
-                let snapshot = gtk::Snapshot::new();
-                let paintable = gtk::WidgetPaintable::new(Some(&cell));
-                paintable.snapshot(&snapshot, f64::from(rect.width()), f64::from(rect.height()));
-                let image = snapshot.to_node().or_else(|| snapshot_allocated_cell(&cell))?;
-                let image_size = graphene::Size::new(rect.width(), rect.height());
-                Some(Tile {
+                Some(VisibleCell {
                     item,
                     position,
                     rect,
+                    cell,
+                })
+            })
+            .collect();
+        cells.sort_unstable_by_key(|cell| cell.position);
+        cells
+    }
+
+    fn visible_zoom_tiles(&self, viewport: &graphene::Rect) -> Vec<Tile> {
+        self.visible_zoom_cells(viewport)
+            .into_iter()
+            .filter_map(|visible| {
+                let image = snapshot_cell(&visible.cell, &visible.rect)?;
+                let image_size = graphene::Size::new(visible.rect.width(), visible.rect.height());
+                Some(Tile {
+                    item: visible.item,
+                    position: visible.position,
+                    rect: visible.rect,
                     image_size,
                     image,
                 })
             })
-            .collect();
-        tiles.sort_unstable_by_key(|tile| tile.position);
-        tiles
+            .collect()
     }
 }
 
@@ -244,7 +276,10 @@ impl Zoom {
         if self.reflow.get().is_none() {
             if let Some(reflow) = self.prepare_reflow(pane, child) {
                 let _ = self.reflow.set(reflow);
-                self.started.set(None);
+                let started = pane
+                    .frame_clock()
+                    .map(|clock| clock.frame_time().saturating_sub(self.first_frame_us));
+                self.started.set(started);
                 self.progress.set(self.eased_progress(self.first_frame_us));
             }
         }
@@ -260,20 +295,17 @@ impl Zoom {
         };
         snapshot.append_node(&reflow.backdrop);
         snapshot.push_clip(&reflow.viewport);
+        let progress = self.progress.get();
         for moving in &reflow.tiles {
-            moving.draw(snapshot, self.progress.get());
+            moving.draw(snapshot, progress, &reflow.viewport);
         }
         snapshot.pop();
     }
 
     fn prepare_reflow(&self, pane: &FolderPane, child: &gtk::Widget) -> Option<Reflow> {
-        // Draw the destination first so the recycled cells have current
-        // paintables at their final allocation.
-        let base = gtk::Snapshot::new();
-        pane.snapshot_child(child, &base);
-        let base = base.to_node()?;
-        let viewport = pane.zoom_viewport(&pane.bounds_for_zoom()?);
-        let after = pane.visible_zoom_tiles(&viewport);
+        let bounds = pane.bounds_for_zoom()?;
+        let viewport = pane.zoom_viewport(&bounds);
+        let after = pane.visible_zoom_cells(&viewport);
         let first = after.first()?.position;
         let mut old: HashMap<_, _> = self
             .before
@@ -283,16 +315,21 @@ impl Zoom {
         // A just-recycled list can still report the previous allocation.
         // Wait for the next paint until GTK reports the new geometry.
         if after.len() == old.len()
-            && after.iter().all(|tile| {
-                old.get(tile.item.entry().uri.as_str())
-                    .is_some_and(|old| old.rect == tile.rect)
+            && after.iter().all(|cell| {
+                old.get(cell.item.entry().uri.as_str())
+                    .is_some_and(|old| old.rect == cell.rect)
             })
         {
             return None;
         }
+        // Draw the destination once so newly entering cells have current
+        // paintables at their final allocation and we can build the backdrop.
+        let base = gtk::Snapshot::new();
+        pane.snapshot_child(child, &base);
+        let base = base.to_node()?;
         let mask = gtk::Snapshot::new();
-        for tile in &after {
-            if let Some(rect) = tile.rect.intersection(&viewport) {
+        for cell in &after {
+            if let Some(rect) = cell.rect.intersection(&viewport) {
                 mask.append_node(gsk::ColorNode::new(&gdk::RGBA::WHITE, &rect));
             }
         }
@@ -306,7 +343,7 @@ impl Zoom {
             backdrop.append_node(gsk::ColorNode::new(&background, &viewport));
         }
         backdrop.append_node(masked);
-        let backdrop = backdrop.to_node()?;
+        let backdrop = cache_backdrop(pane, backdrop.to_node()?, &bounds);
         let old_first = self
             .before
             .iter()
@@ -315,17 +352,34 @@ impl Zoom {
             .unwrap_or(first);
         let mut tiles: Vec<_> = after
             .into_iter()
-            .map(|mut tile| {
-                let from = if let Some(previous) = old.remove(tile.item.entry().uri.as_str()) {
+            .filter_map(|visible| {
+                if let Some(previous) = old.remove(visible.item.entry().uri.as_str()) {
                     // The destination can still be loading a thumbnail at
-                    // its new size. Move the artwork the user already saw.
-                    tile.image = previous.image.clone();
-                    tile.image_size = previous.image_size;
-                    previous.rect
+                    // its new size. Move the artwork the user already saw
+                    // without snapshotting the destination cell.
+                    let tile = Tile {
+                        item: visible.item,
+                        position: visible.position,
+                        rect: visible.rect,
+                        image_size: previous.image_size,
+                        image: previous.image.clone(),
+                    };
+                    Some(MovingTile {
+                        tile,
+                        from: previous.rect,
+                    })
                 } else {
-                    tile.offscreen(&viewport, old_first)
-                };
-                MovingTile { tile, from }
+                    let image = snapshot_cell(&visible.cell, &visible.rect)?;
+                    let tile = Tile {
+                        item: visible.item,
+                        position: visible.position,
+                        rect: visible.rect,
+                        image_size: graphene::Size::new(visible.rect.width(), visible.rect.height()),
+                        image,
+                    };
+                    let from = tile.offscreen(&viewport, old_first);
+                    Some(MovingTile { tile, from })
+                }
             })
             .collect();
         for previous in &self.before {
@@ -344,6 +398,45 @@ impl Zoom {
             tiles,
         })
     }
+}
+
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "display scale factors are small integers"
+)]
+fn cache_backdrop(pane: &FolderPane, backdrop: gsk::RenderNode, bounds: &graphene::Rect) -> gsk::RenderNode {
+    let Some(renderer) = pane.native().and_then(|native| native.renderer()) else {
+        return backdrop;
+    };
+    let scale = pane.scale_factor().max(1) as f32;
+    let (node, render_bounds) = if scale > 1.0 {
+        let transform = gsk::Transform::new().scale(scale, scale);
+        (
+            gsk::TransformNode::new(&backdrop, Some(&transform)).upcast(),
+            graphene::Rect::new(
+                bounds.x() * scale,
+                bounds.y() * scale,
+                bounds.width() * scale,
+                bounds.height() * scale,
+            ),
+        )
+    } else {
+        (backdrop.clone(), *bounds)
+    };
+    let texture = renderer.render_texture(&node, Some(&render_bounds));
+    gsk::TextureNode::new(&texture, bounds).upcast()
+}
+
+fn snapshot_cell(cell: &gtk::Widget, rect: &graphene::Rect) -> Option<gsk::RenderNode> {
+    snapshot_allocated_cell(cell).or_else(|| {
+        let snapshot = gtk::Snapshot::new();
+        gtk::WidgetPaintable::new(Some(cell)).snapshot(
+            &snapshot,
+            f64::from(rect.width()),
+            f64::from(rect.height()),
+        );
+        snapshot.to_node()
+    })
 }
 
 fn snapshot_allocated_cell(cell: &gtk::Widget) -> Option<gsk::RenderNode> {
@@ -374,8 +467,11 @@ impl MovingTile {
         self.from.interpolate(&self.tile.rect, progress)
     }
 
-    fn draw(&self, snapshot: &gtk::Snapshot, progress: f64) {
+    fn draw(&self, snapshot: &gtk::Snapshot, progress: f64, viewport: &graphene::Rect) {
         let rect = self.rect_at(progress);
+        if rect.intersection(viewport).is_none() {
+            return;
+        }
         snapshot.save();
         snapshot.translate(&graphene::Point::new(rect.x(), rect.y()));
         snapshot.scale(
@@ -531,6 +627,48 @@ mod tests {
         pane.stop_zoom_animation();
         settings.set_gtk_enable_animations(false);
         assert!(pane.capture_zoom(500).is_none());
+        settings.set_gtk_enable_animations(previous);
+    }
+
+    #[gtk::test]
+    fn zoom_keeps_sidebar_rows_and_skips_places_changed() {
+        let fixture = Fixture::with_files(40);
+        let test = TestWindow::open(&fixture.uri());
+        let pane = test.window.folder_pane();
+        let settings = pane.settings();
+        let previous = settings.is_gtk_enable_animations();
+        settings.set_gtk_enable_animations(true);
+        test.window.show_view(FolderView::from_key("small").unwrap());
+        wait_for_frames(pane, 3);
+
+        let sidebar_list = test.window.sidebar().list();
+        let first_row_before = sidebar_list.row_at_index(0).expect("sidebar has rows");
+        let places_changed = Rc::new(Cell::new(0u32));
+        let count = Rc::clone(&places_changed);
+        let handler = test.context.connect_places_changed(move || {
+            count.set(count.get() + 1);
+        });
+
+        let small = FolderView::from_key("small").unwrap();
+        let expected = small.zoomed(1);
+        test.window.zoom_view(1);
+        wait_until("zoomed view preference to be saved", || {
+            let style = test.context.settings_data().preferences.view_for(&fixture.uri());
+            FolderView::from_style(&style.mode, style.icon_size) == expected
+        });
+        wait_for_frames(pane, 3);
+        test.context.disconnect(handler);
+
+        assert_eq!(
+            places_changed.get(),
+            0,
+            "zooming should not emit places-changed and redraw the sidebar"
+        );
+        let first_row_after = sidebar_list.row_at_index(0).expect("sidebar still has rows");
+        assert_eq!(
+            first_row_before, first_row_after,
+            "sidebar row widgets must stay intact during zoom"
+        );
         settings.set_gtk_enable_animations(previous);
     }
 }

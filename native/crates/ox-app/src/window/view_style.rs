@@ -260,9 +260,19 @@ impl BrowserWindow {
         self.remember_pane_style(self.folder_pane());
     }
 
+    /// Saves the zoomed view style without emitting `places-changed`, so
+    /// stepping through layouts does not redraw the sidebar or chrome mid-animation.
+    pub(super) fn remember_zoom_style(&self) {
+        self.remember_pane_style_with_notification(self.folder_pane(), false);
+    }
+
     /// A delayed header resize belongs to the pane that emitted it, even
     /// if focus has moved to its neighbour.
     pub(super) fn remember_pane_style(&self, pane: &FolderPane) {
+        self.remember_pane_style_with_notification(pane, true);
+    }
+
+    fn remember_pane_style_with_notification(&self, pane: &FolderPane, notify_places: bool) {
         if self.imp().applying_style.get() {
             return;
         }
@@ -274,7 +284,13 @@ impl BrowserWindow {
             .find_map(|(side, uri)| (self.pane_on(side) == pane).then_some(uri));
         if preferences.per_folder_views {
             if let Some(uri) = shown_uri.filter(|uri| may_remember(uri)) {
-                self.save_style(&uri, style, ViewScope::Folder);
+                if notify_places {
+                    self.save_style(&uri, style, ViewScope::Folder);
+                } else {
+                    let reply = self.preference_failure_reply();
+                    self.context()
+                        .remember_view_silently(uri, style, ViewScope::Folder, reply);
+                }
             }
         } else {
             // Downloads keeps its own Group by apart from the shared style.
@@ -297,8 +313,13 @@ impl BrowserWindow {
             update.downloads_group_by = downloads_group_by;
             update.view_options = Some(options);
             update.column_widths = Some(pane.details().widths_to_save());
-            self.context()
-                .update_preferences(update, self.preference_failure_reply());
+            if notify_places {
+                self.context()
+                    .update_preferences(update, self.preference_failure_reply());
+            } else {
+                self.context()
+                    .remember_preferences_with_reply(update, self.preference_failure_reply());
+            }
         }
     }
 

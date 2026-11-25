@@ -29,7 +29,10 @@ pub(super) fn stylesheet(options: &AppearanceOptions, appearance: Appearance) ->
         let _ = writeln!(css, "{GRID} {{ margin: {half}px; }}");
     }
     if let Some(padding) = options.icon_padding {
-        let _ = writeln!(css, "{GRID} {{ padding: {padding}px; min-height: 0; }}");
+        // Keep the uniform tile min-height from theme/fonts.rs so 1-line and
+        // 2-line rows have identical heights and GtkGridView does not
+        // oscillate its scroll range while holding the scrollbar thumb.
+        let _ = writeln!(css, "{GRID} {{ padding: {padding}px; }}");
         let inset = 1 - i32::from(padding);
         let _ = writeln!(
             css,

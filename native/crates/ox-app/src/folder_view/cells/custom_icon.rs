@@ -73,23 +73,38 @@ impl FileCell {
     pub(crate) fn look_up_picture(&self, item: &FileItem, previews: PreviewPolicy) {
         self.cancel_picture_lookup();
         let imp = self.imp();
-        imp.custom_icon.set_visible(false);
         imp.folder_picture.show_texture(None);
-        imp.image.set_opacity(1.0);
         let entry = item.entry();
         let uri = entry.uri.clone();
         let size = imp.icon_size.get();
         let scale = self.scale_factor().max(1);
         let pixels = size * scale;
         let preview = previews.request(entry, pixels);
+        let cached = preview.as_ref().and_then(thumbnails::cached_preview);
+        if let Some((texture, _)) = &cached {
+            imp.custom_icon.set_paintable(Some(texture));
+            imp.custom_icon.set_visible(true);
+            imp.image.set_opacity(0.0);
+        } else {
+            imp.custom_icon.set_visible(false);
+            imp.image.set_opacity(1.0);
+        }
         if !uri.starts_with("file:") && preview.is_none() {
+            return;
+        }
+        let enough_cached = cached.is_some_and(|(_, enough)| enough);
+        let cached_own = OWN_PICTURES.with_borrow(|cache| cache.get(&uri).cloned());
+        if enough_cached && cached_own.as_ref().is_some_and(OwnPictures::is_empty) {
             return;
         }
         let is_folder = entry.is_dir;
         let on_the_folder = imp.is_tile.get() && imp.icon_size.get() >= SMALLEST_PICTURE_ICON;
         let cell = self.downgrade();
         let lookup = glib::spawn_future_local(async move {
-            let own = own_pictures(&uri).await;
+            let own = match cached_own {
+                Some(own) => own,
+                None => own_pictures(&uri).await,
+            };
             let mut paintable = match own.icon {
                 Some(icon) => icon_texture(icon)
                     .await
@@ -126,16 +141,18 @@ impl FileCell {
                 }
                 paintable = icon_texture(picture).await.map(|texture| texture.upcast());
             }
-            if paintable.is_none() {
+            if paintable.is_none() && !enough_cached {
                 if let Some(request) = preview {
                     paintable = thumbnails::preview(request).await.map(|texture| texture.upcast());
                 }
             }
-            if let (Some(cell), Some(paintable)) = (cell.upgrade(), paintable) {
+            if let Some(cell) = cell.upgrade() {
                 let imp = cell.imp();
-                imp.custom_icon.set_paintable(Some(&paintable));
-                imp.custom_icon.set_visible(true);
-                imp.image.set_opacity(0.0);
+                if let Some(paintable) = paintable {
+                    imp.custom_icon.set_paintable(Some(&paintable));
+                    imp.custom_icon.set_visible(true);
+                    imp.image.set_opacity(0.0);
+                }
                 imp.picture_lookup.take();
             }
         });
@@ -164,16 +181,37 @@ impl FileCell {
     }
 }
 
+/// How many local items' custom-icon metadata entries are cached in memory.
+const MAX_OWN_PICTURES: usize = 2048;
+
+thread_local! {
+    static OWN_PICTURES: RefCell<HashMap<String, OwnPictures>> = RefCell::new(HashMap::new());
+}
+
+/// Drops cached custom-icon / folder-picture metadata for `uri` so a change
+/// in Properties is read again.
+pub(super) fn forget_own_pictures(uri: &str) {
+    OWN_PICTURES.with_borrow_mut(|cache| {
+        cache.remove(uri);
+    });
+}
+
 /// The custom icon and folder picture assigned to a local item.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 struct OwnPictures {
     icon: Option<String>,
     icon_name: Option<String>,
     folder_picture: Option<String>,
 }
 
+impl OwnPictures {
+    fn is_empty(&self) -> bool {
+        self.icon.is_none() && self.icon_name.is_none() && self.folder_picture.is_none()
+    }
+}
+
 /// The custom icon and folder picture of the local item at `uri`, read
-/// in one query.
+/// in one query and cached in memory.
 async fn own_pictures(uri: &str) -> OwnPictures {
     if !uri.starts_with("file:") {
         return OwnPictures::default();
@@ -194,11 +232,18 @@ async fn own_pictures(uri: &str) -> OwnPictures {
             .filter(|picture| !picture.is_empty())
             .map(|picture| picture.to_string())
     };
-    OwnPictures {
+    let own = OwnPictures {
         icon: named(CUSTOM_ICON),
         icon_name: named(CUSTOM_ICON_NAME),
         folder_picture: named(FOLDER_PICTURE),
-    }
+    };
+    OWN_PICTURES.with_borrow_mut(|cache| {
+        if cache.len() >= MAX_OWN_PICTURES && !cache.contains_key(uri) {
+            cache.clear();
+        }
+        cache.insert(uri.to_owned(), own.clone());
+    });
+    own
 }
 
 /// The picture at `uri` at icon size, if it is a local image of a
