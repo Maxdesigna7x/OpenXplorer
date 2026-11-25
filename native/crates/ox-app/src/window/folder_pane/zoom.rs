@@ -418,6 +418,9 @@ mod tests {
         tick.remove();
         assert!(!observed.get(), "window resize animation starts off");
 
+        test.window.set_default_size(1320, 810);
+        wait_until("the window to widen", || (test.window.width() - 1320).abs() <= 8);
+        wait_for_frames(pane, 3);
         test.context.update_preferences(
             PreferencesUpdate {
                 animate_view_zoom: Some(false),
@@ -430,6 +433,7 @@ mod tests {
             test.context.resize_animation_ms().is_some()
         });
         assert!(test.context.view_animation_ms().is_none());
+        wait_for_frames(pane, 3);
 
         let observed = Rc::new(Cell::new(false));
         let record = Rc::clone(&observed);
@@ -452,7 +456,7 @@ mod tests {
             }
             glib::ControlFlow::Continue
         });
-        test.window.set_default_size(1320, 810);
+        test.window.set_default_size(780, 680);
         wait_until("the resized grid to move its files", || observed.get());
         tick.remove();
         settings.set_gtk_enable_animations(previous);
