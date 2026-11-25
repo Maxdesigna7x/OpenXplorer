@@ -38,6 +38,7 @@ mod custom_command;
 mod editors;
 mod file_dialog_service;
 mod file_manager_service;
+mod host_apps;
 mod launch_shortcut_service;
 mod mime_backend;
 mod open_with_dialog;
@@ -62,8 +63,8 @@ use ox_core::integration::{
 #[cfg(test)]
 pub(crate) use applications::LaunchTarget;
 pub(crate) use applications::{
-    application_image, launch, menu_applications, prepare_launch, ApplicationChoice, DefaultChoice,
-    OpenWithError, PreparedLaunch,
+    application_display_name, application_image, launch, menu_applications, prepare_launch,
+    ApplicationChoice, DefaultChoice, OpenWithError, PreparedLaunch,
 };
 pub(crate) use brave_dialog::BraveDialog;
 pub(crate) use changes::{IntegrationError, MakeDefaultChoice};
