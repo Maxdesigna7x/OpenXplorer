@@ -112,11 +112,12 @@ impl PreviewPolicy {
 
     /// The preview request for `entry` at `pixels` device pixels, when
     /// [`Self::allows`] it; with network previews off it asks for a file
-    /// on this computer's own disks only.
+    /// on this computer's own disks only. Video thumbnailers seek to a single
+    /// keyframe rather than decoding the whole file, so videos are not blocked
+    /// by the 50 MB image size limit.
     pub(crate) fn request(self, entry: &Entry, pixels: i32) -> Option<PreviewRequest> {
         let request = PreviewRequest::for_entry(entry, pixels)?;
-        let existing_only = request.content_type.starts_with("video/") && !self.allows(entry);
-        let allowed = if existing_only {
+        let allowed = if request.content_type.starts_with("video/") {
             Self {
                 size_limit: None,
                 ..self
@@ -127,7 +128,7 @@ impl PreviewPolicy {
         };
         allowed.then_some(PreviewRequest {
             local_only: !self.remote,
-            existing_only,
+            existing_only: false,
             ..request
         })
     }
@@ -512,13 +513,19 @@ async fn make_thumbnail_with(
             }
         }
     }
-    if request.content_type.starts_with("video/")
-        && ox_core::integration::Sandbox::detect() == ox_core::integration::Sandbox::Flatpak
-        && request.uri.starts_with("file:")
-    {
-        if let Some(path) = host_video_thumbnail(request, cache_dir, flavor, modified).await {
+    if request.content_type.starts_with("video/") && request.uri.starts_with("file:") {
+        if ox_core::integration::Sandbox::detect() == ox_core::integration::Sandbox::Flatpak {
+            if let Some(path) = host_video_thumbnail(request, cache_dir, flavor, modified).await {
+                return Ok(path);
+            }
+        }
+        if let Ok(path) = by_thumbnailer(request, cache_dir, modified, flavor, catalogue, false).await {
             return Ok(path);
         }
+        if let Some(path) = gstreamer_video_thumbnail(request, cache_dir, flavor, modified).await {
+            return Ok(path);
+        }
+        return Err(Missing::Failed);
     }
     by_thumbnailer(request, cache_dir, modified, flavor, catalogue, false).await
 }
@@ -571,6 +578,117 @@ async fn host_video_thumbnail(
         })
         .await
         .flatten()
+}
+
+/// Fallback video thumbnailer using GStreamer's `playbin` `convert-sample` so
+/// any format playable in OpenXplorer (`.avi`, `.mpg`, `.mkv`, `.mp4`, etc.)
+/// still gets a thumbnail when `totem-video-thumbnailer` fails or is absent.
+async fn gstreamer_video_thumbnail(
+    request: &PreviewRequest,
+    cache_dir: &Path,
+    flavor: ThumbnailFlavor,
+    modified: u64,
+) -> Option<PathBuf> {
+    let uri = request.uri.clone();
+    let cache_dir = cache_dir.to_path_buf();
+    MAKING
+        .with(Rc::clone)
+        .blocking(move |cancel| {
+            if cancel.is_cancelled() {
+                return None;
+            }
+            let pixbuf = extract_video_frame(&uri, flavor.pixels(), cancel)?;
+            if cancel.is_cancelled() {
+                return None;
+            }
+            writer::save_thumbnail(&cache_dir, &Source { uri, modified }, flavor, &pixbuf).ok()
+        })
+        .await
+        .flatten()
+}
+
+fn extract_video_frame(uri: &str, edge: i32, cancel: &gio::Cancellable) -> Option<Pixbuf> {
+    use gstreamer::prelude::*;
+
+    gstreamer::init().ok()?;
+    let playbin = gstreamer::ElementFactory::make("playbin").build().ok()?;
+    let audio_sink = gstreamer::ElementFactory::make("fakesink").build().ok()?;
+    let video_sink = gstreamer::ElementFactory::make("fakesink").build().ok()?;
+    let text_sink = gstreamer::ElementFactory::make("fakesink").build().ok()?;
+    video_sink.set_property("sync", false);
+    playbin.set_property("uri", uri);
+    playbin.set_property("audio-sink", &audio_sink);
+    playbin.set_property("video-sink", &video_sink);
+    playbin.set_property("text-sink", &text_sink);
+
+    struct StopOnDrop(gstreamer::Element);
+    impl Drop for StopOnDrop {
+        fn drop(&mut self) {
+            let _ = self.0.set_state(gstreamer::State::Null);
+        }
+    }
+    let guard = StopOnDrop(playbin);
+    let playbin = &guard.0;
+
+    playbin.set_state(gstreamer::State::Paused).ok()?;
+    let (state_res, _, _) = playbin.state(gstreamer::ClockTime::from_seconds(5));
+    state_res.ok()?;
+    if cancel.is_cancelled() {
+        return None;
+    }
+
+    if let Some(duration) = playbin.query_duration::<gstreamer::ClockTime>() {
+        let target_ns = duration.nseconds() / 6;
+        if target_ns > 0 {
+            let flags = gstreamer::SeekFlags::FLUSH | gstreamer::SeekFlags::KEY_UNIT;
+            if playbin
+                .seek_simple(flags, gstreamer::ClockTime::from_nseconds(target_ns))
+                .is_ok()
+            {
+                let _ = playbin.state(gstreamer::ClockTime::from_seconds(3));
+            }
+        }
+    }
+    if cancel.is_cancelled() {
+        return None;
+    }
+
+    let caps = gstreamer::Caps::builder("video/x-raw")
+        .field("format", "RGBA")
+        .build();
+    let sample = playbin.emit_by_name::<Option<gstreamer::Sample>>("convert-sample", &[&caps])?;
+    let caps = sample.caps()?;
+    let structure = caps.structure(0)?;
+    let width: i32 = structure.get("width").ok()?;
+    let height: i32 = structure.get("height").ok()?;
+    if width <= 0 || height <= 0 {
+        return None;
+    }
+    let buffer = sample.buffer()?;
+    let map = buffer.map_readable().ok()?;
+    let rowstride = width.checked_mul(4)?;
+    let expected = usize::try_from(rowstride.checked_mul(height)?).ok()?;
+    let slice = map.as_slice().get(..expected)?;
+    let bytes = glib::Bytes::from(slice);
+    let pixbuf = Pixbuf::from_bytes(
+        &bytes,
+        gtk::gdk_pixbuf::Colorspace::Rgb,
+        true,
+        8,
+        width,
+        height,
+        rowstride,
+    );
+    if width > edge || height > edge {
+        let longest = width.max(height).max(1);
+        let scaled_w =
+            i32::try_from((i64::from(width) * i64::from(edge) / i64::from(longest)).max(1)).unwrap_or(edge);
+        let scaled_h =
+            i32::try_from((i64::from(height) * i64::from(edge) / i64::from(longest)).max(1)).unwrap_or(edge);
+        pixbuf.scale_simple(scaled_w, scaled_h, gtk::gdk_pixbuf::InterpType::Bilinear)
+    } else {
+        Some(pixbuf)
+    }
 }
 
 /// The thumbnail of `request` decoded in the app, or why there is none:
