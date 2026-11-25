@@ -226,19 +226,18 @@ fn the_tab_strip_is_the_title_bar_of_a_decorated_window_without_a_menu_bar() {
     }
 }
 
-/// New windows open at 1320 by 810 and never shrink below 670 by 470
-/// (`set_default_size` and `set_size_request` in winspace.py).
+/// New windows open at 1320 by 810 and can use the compact frame.
 ///
 /// parity: LOOK-011
 #[gtk::test]
-fn new_windows_open_at_1320_by_810_and_keep_at_least_670_by_470() {
+fn new_windows_open_at_1320_by_810_with_a_smaller_minimum() {
     let fixture = Fixture::standard();
     let test = laid_out(&fixture.uri());
     assert_eq!(test.window.default_size(), (1320, 810));
-    assert_eq!(test.window.size_request(), (670, 470));
+    assert_eq!(test.window.size_request(), (400, 240));
     let (minimum_width, ..) = test.window.measure(gtk::Orientation::Horizontal, -1);
     let (minimum_height, ..) = test.window.measure(gtk::Orientation::Vertical, -1);
-    assert!(minimum_width >= 670 && minimum_height >= 470);
+    assert!(minimum_width >= 400 && minimum_height >= 240);
 }
 
 /// The navigation row's search box shows its magnifier at the right, and

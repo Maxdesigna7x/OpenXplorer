@@ -36,10 +36,10 @@ const DEFAULT_NETWORK_INTERVAL: u32 = 60;
 pub const SIDEBAR_WIDTHS: RangeInclusive<u32> = 140..=560;
 
 /// Accepted window widths, in pixels: from the window's minimum up.
-pub const WINDOW_WIDTHS: RangeInclusive<u32> = 670..=16_384;
+pub const WINDOW_WIDTHS: RangeInclusive<u32> = 400..=16_384;
 
 /// Accepted window heights, in pixels: from the window's minimum up.
-pub const WINDOW_HEIGHTS: RangeInclusive<u32> = 470..=16_384;
+pub const WINDOW_HEIGHTS: RangeInclusive<u32> = 240..=16_384;
 
 /// The size new windows open at, and whether they open maximized: the
 /// last window's (TAB-054). The Python app ignores it.

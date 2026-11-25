@@ -20,3 +20,18 @@ window.ox.max-680 .navigation { border-spacing: 5px; }
 window.ox.max-680 .navigation .nav-buttons button { min-width: 29px; }
 window.ox.max-680 .ox-titlebar { padding-left: 5px; }
 window.ox.max-680 .ox-titlebar button.caption { min-width: 32px; }
+
+window.ox.max-520 .ox-titlebar { min-height: 34px; }
+window.ox.max-520 .ox-titlebar .title-drag { min-width: 22px; }
+window.ox.max-520 .ox-titlebar button.caption { min-width: 28px; min-height: 34px; }
+window.ox.max-520 .ox-titlebar button.newtab { min-width: 28px; min-height: 28px; }
+window.ox.max-520 .navigation { min-height: 30px; padding: 3px 6px; border-spacing: 4px; }
+window.ox.max-520 .navigation .nav-buttons button { min-width: 25px; min-height: 29px; }
+window.ox.max-520 .navigation .nav-places > button { min-width: 28px; min-height: 29px; }
+window.ox.max-520 .navigation .address { min-width: 104px; min-height: 28px; }
+window.ox.max-520 .commandbar { min-height: 36px; padding: 0 5px; }
+window.ox.max-520 .commandbar button.command,
+window.ox.max-520 .commandbar menubutton.command > button { min-height: 28px; padding: 0 5px; }
+window.ox.max-520 .commandbar separator.vertical { margin: 0 3px; }
+window.ox.max-520 .statusbar { min-height: 25px; padding: 0 6px; }
+window.ox.max-520 .statusbar button { margin-left: -4px; }

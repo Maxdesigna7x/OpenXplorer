@@ -19,9 +19,9 @@
     <!-- set_default_size(1320, 810) in v2.0.0:desktop/winspace.py. -->
     <property name="default-width">1320</property>
     <property name="default-height">810</property>
-    <!-- set_size_request(670, 470) in v2.0.0:desktop/winspace.py. -->
-    <property name="width-request">670</property>
-    <property name="height-request">470</property>
+    <!-- The compact browsing layout keeps room for the file list. -->
+    <property name="width-request">400</property>
+    <property name="height-request">240</property>
     <style>
       <class name="ox"/>
     </style>

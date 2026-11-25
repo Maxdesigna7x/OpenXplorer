@@ -5073,7 +5073,7 @@ msgstr ""
 msgid "More"
 msgstr ""
 
-#: crates/ox-app/src/window/command_bar/menus.rs crates/ox-app/src/window/shortcuts_window.rs crates/ox-app/src/window/sidebar.rs
+#: crates/ox-app/src/window/command_bar/menus.rs crates/ox-app/src/window/shortcuts_window.rs crates/ox-app/src/window/sidebar.rs crates/ox-app/src/window/sidebar_toggle.rs
 msgid "Navigation pane"
 msgstr ""
 
@@ -7199,7 +7199,7 @@ msgid "Places"
 msgstr ""
 
 #: crates/ox-app/src/window/sidebar_toggle.rs
-msgid "Places (F9 shows the navigation pane)"
+msgid "Toggle navigation pane (F9)"
 msgstr ""
 
 #: crates/ox-app/src/window/software_search.rs

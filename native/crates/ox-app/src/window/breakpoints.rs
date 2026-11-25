@@ -7,10 +7,11 @@
 //! within (`max-1190` and so on), so `resources/skin/breakpoints.css`
 //! narrows paddings and widths, and [`BrowserWindow::fit_to_width`] hides
 //! what CSS cannot:
-//! the details pane below 961 pixels, and the search box, some commands
-//! and two columns below 681. Hiding the details pane this
-//! way leaves the saved preference alone, so it comes back when the window
-//! is wider again. The 1190-pixel column and sidebar widths of the web
+//! the details pane below 961 pixels, and the sidebar, search box, some
+//! commands and two columns below 681. Both panes follow their saved
+//! visibility preferences when the window grows again. At 520 pixels the
+//! browsing controls become smaller to leave room for the file list.
+//! The 1190-pixel column and sidebar widths of the web
 //! stylesheet are overridden there by later `!important` rules, so they
 //! are not ported.
 
@@ -32,6 +33,8 @@ const NARROW_PANE_WIDTH: i32 = 235;
 const NARROW_TAB_WIDTH: i32 = 180;
 /// A tab's width from 680 pixels down (`.tab{width:150px}`).
 const COMPACT_TAB_WIDTH: i32 = 150;
+/// A tab still shows its name and close button at the smallest width.
+const TINY_TAB_WIDTH: i32 = 110;
 
 /// The band of widths the window is in, narrowest last.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -45,8 +48,10 @@ pub(super) enum WindowWidth {
     Reduced,
     /// 681 to 960 pixels: no details pane, narrower tabs.
     Narrow,
-    /// 680 pixels or less: no search box, fewer commands and columns.
+    /// 521 to 680 pixels: no sidebar or search box, fewer commands and columns.
     Compact,
+    /// 520 pixels or less: tighter navigation and window controls.
+    Tiny,
 }
 
 /// One `@media(max-width)` rule of the web stylesheet.
@@ -61,7 +66,7 @@ struct WidthLimit {
 }
 
 /// Every width limit, widest first.
-const LIMITS: [WidthLimit; 4] = [
+const LIMITS: [WidthLimit; 5] = [
     WidthLimit {
         max_width: 1190,
         band: WindowWidth::Medium,
@@ -81,6 +86,11 @@ const LIMITS: [WidthLimit; 4] = [
         max_width: 680,
         band: WindowWidth::Compact,
         css_class: "max-680",
+    },
+    WidthLimit {
+        max_width: 520,
+        band: WindowWidth::Tiny,
+        css_class: "max-520",
     },
 ];
 
@@ -115,7 +125,7 @@ impl WindowWidth {
 
     /// Whether the window is at its most compact (the 680-pixel rules).
     pub(super) fn is_compact(self) -> bool {
-        self == WindowWidth::Compact
+        self >= WindowWidth::Compact
     }
 
     /// How much room the Settings page has: from 960 pixels down its rows
@@ -145,11 +155,25 @@ impl WindowWidth {
             WindowWidth::Wide | WindowWidth::Medium | WindowWidth::Reduced => TAB_WIDTH,
             WindowWidth::Narrow => NARROW_TAB_WIDTH,
             WindowWidth::Compact => COMPACT_TAB_WIDTH,
+            WindowWidth::Tiny => TINY_TAB_WIDTH,
         }
     }
 }
 
 impl BrowserWindow {
+    /// Fits a restored small window before GTK measures the wider layout.
+    pub(super) fn install_initial_width(&self) {
+        self.connect_notify_local(Some("default-width"), |window, _| {
+            let width = window.default_width();
+            if !window.is_mapped() && width > 0 {
+                let band = WindowWidth::for_width(width);
+                if window.imp().window_width.replace(band) != band {
+                    window.fit_to_width(band);
+                }
+            }
+        });
+    }
+
     /// Follows the window's width as GTK allocates it. The layout changes
     /// after the allocation, because changing styles during one would
     /// start it again.
@@ -162,7 +186,7 @@ impl BrowserWindow {
         glib::idle_add_local_once(glib::clone!(
             #[weak(rename_to = window)]
             self,
-            move || window.fit_to_width(band)
+            move || window.fit_to_width(window.window_width())
         ));
     }
 
@@ -175,11 +199,14 @@ impl BrowserWindow {
             self.add_css_class(class);
         }
         self.fit_details_pane();
+        self.fit_sidebar();
         self.details_pane().set_width(band.details_pane_width());
         let compact = band.is_compact();
         self.tab_strip().set_tab_width(band.tab_width());
         self.search_box().set_visible(!compact);
         self.command_bar().fit_to_width(band);
+        self.status_bar()
+            .set_spacing(if band == WindowWidth::Tiny { 8 } else { 18 });
         let details_columns = if compact {
             DetailsColumns::NameAndSize
         } else {
@@ -278,6 +305,11 @@ mod tests {
                 width: 600,
                 band: WindowWidth::Compact,
                 classes: &["max-1190", "max-1050", "max-960", "max-680"],
+            },
+            WidthCase {
+                width: 520,
+                band: WindowWidth::Tiny,
+                classes: &["max-1190", "max-1050", "max-960", "max-680", "max-520"],
             },
         ];
         for case in cases {

@@ -94,6 +94,8 @@ pub(crate) struct BrowserWindow {
     /// The Places button shown in the navigation row while the navigation
     /// pane is hidden.
     pub(super) places_button: OnceCell<gtk::MenuButton>,
+    /// The navigation row's manual sidebar switch.
+    pub(super) sidebar_toggle: OnceCell<gtk::ToggleButton>,
     /// The navigation pane.
     #[template_child]
     pub(super) sidebar: TemplateChild<Sidebar>,
