@@ -580,8 +580,8 @@ async fn host_video_thumbnail(
         .flatten()
 }
 
-/// Fallback video thumbnailer using GStreamer's `playbin` `convert-sample` so
-/// any format playable in OpenXplorer (`.avi`, `.mpg`, `.mkv`, `.mp4`, etc.)
+/// Fallback video thumbnailer using `GStreamer`'s `playbin` `convert-sample` so
+/// any format playable in `OpenXplorer` (`.avi`, `.mpg`, `.mkv`, `.mp4`, etc.)
 /// still gets a thumbnail when `totem-video-thumbnailer` fails or is absent.
 async fn gstreamer_video_thumbnail(
     request: &PreviewRequest,
@@ -610,6 +610,13 @@ async fn gstreamer_video_thumbnail(
 fn extract_video_frame(uri: &str, edge: i32, cancel: &gio::Cancellable) -> Option<Pixbuf> {
     use gstreamer::prelude::*;
 
+    struct StopOnDrop(gstreamer::Element);
+    impl Drop for StopOnDrop {
+        fn drop(&mut self) {
+            let _ = self.0.set_state(gstreamer::State::Null);
+        }
+    }
+
     gstreamer::init().ok()?;
     let playbin = gstreamer::ElementFactory::make("playbin").build().ok()?;
     let audio_sink = gstreamer::ElementFactory::make("fakesink").build().ok()?;
@@ -621,12 +628,6 @@ fn extract_video_frame(uri: &str, edge: i32, cancel: &gio::Cancellable) -> Optio
     playbin.set_property("video-sink", &video_sink);
     playbin.set_property("text-sink", &text_sink);
 
-    struct StopOnDrop(gstreamer::Element);
-    impl Drop for StopOnDrop {
-        fn drop(&mut self) {
-            let _ = self.0.set_state(gstreamer::State::Null);
-        }
-    }
     let guard = StopOnDrop(playbin);
     let playbin = &guard.0;
 
@@ -679,15 +680,27 @@ fn extract_video_frame(uri: &str, edge: i32, cancel: &gio::Cancellable) -> Optio
         height,
         rowstride,
     );
-    if width > edge || height > edge {
-        let longest = width.max(height).max(1);
-        let scaled_w =
-            i32::try_from((i64::from(width) * i64::from(edge) / i64::from(longest)).max(1)).unwrap_or(edge);
-        let scaled_h =
-            i32::try_from((i64::from(height) * i64::from(edge) / i64::from(longest)).max(1)).unwrap_or(edge);
-        pixbuf.scale_simple(scaled_w, scaled_h, gtk::gdk_pixbuf::InterpType::Bilinear)
-    } else {
+    // PNG thumbnails use square pixels. Fit the display dimensions rather
+    // than the stored video frame, whose pixel aspect ratio can be different.
+    let display_width = structure
+        .get::<gstreamer::Fraction>("pixel-aspect-ratio")
+        .ok()
+        .filter(|par| par.numer() > 0)
+        .map_or(f64::from(width), |par| {
+            f64::from(width) * f64::from(par.numer()) / f64::from(par.denom())
+        });
+    let display_height = f64::from(height);
+    let scale = (f64::from(edge) / display_width.max(display_height)).min(1.0);
+    // After rounding, both edges fit in 1..=edge.
+    #[allow(clippy::cast_possible_truncation)]
+    let (scaled_w, scaled_h) = (
+        (display_width * scale).round().max(1.0) as i32,
+        (display_height * scale).round().max(1.0) as i32,
+    );
+    if (scaled_w, scaled_h) == (width, height) {
         Some(pixbuf)
+    } else {
+        pixbuf.scale_simple(scaled_w, scaled_h, gtk::gdk_pixbuf::InterpType::Bilinear)
     }
 }
 
