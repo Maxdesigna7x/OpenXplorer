@@ -238,17 +238,6 @@ impl BrowserWindow {
             let Some(parent) = parent.upgrade() else {
                 return;
             };
-            #[cfg(not(test))]
-            if window.context().desktop_integration().sandbox() == ox_core::integration::Sandbox::Flatpak
-                && !subject.is_folder
-            {
-                let launcher = gtk::FileLauncher::new(Some(&gtk::gio::File::for_uri(&subject.uri)));
-                launcher.set_always_ask(true);
-                glib::spawn_future_local(async move {
-                    let _ = launcher.launch_future(Some(&parent)).await;
-                });
-                return;
-            }
             OpenWithDialog::present_for(&parent, subject, window.application_launcher(), window.reporter());
         });
     }
@@ -460,8 +449,7 @@ impl BrowserWindow {
         };
         let launcher = self.application_launcher();
         let app_id = app_id.to_owned();
-        let name = integration::installed_application(&app_id)
-            .map_or_else(|| app_id.clone(), |app| app.display_name().to_string());
+        let name = integration::application_display_name(&app_id);
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = window)]
             self,

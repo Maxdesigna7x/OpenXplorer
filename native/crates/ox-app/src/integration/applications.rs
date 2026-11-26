@@ -17,11 +17,15 @@ use std::path::PathBuf;
 use gtk::prelude::*;
 use gtk::{gio, glib};
 use ox_core::entry::{inspect, Entry, EntryError, EntryKind};
-use ox_core::integration::{unique_applications, APP_ID, FOLDER_CONTENT_TYPE, UNKNOWN_CONTENT_TYPE};
+use ox_core::integration::{unique_applications, Sandbox, APP_ID, FOLDER_CONTENT_TYPE, UNKNOWN_CONTENT_TYPE};
 use ox_core::location::{normalise, LocationError};
 use ox_core::network::local_path;
 use ox_core::transfer::Cancellation;
 
+use super::host_apps::{
+    cached_application_name, host_application_exists, launch_host_application, list_host_applications,
+    set_host_default_for_type, HostQueryScope,
+};
 use super::tools::installed_application;
 
 /// Why Open with could not list or launch. `Display` is the message the
@@ -126,7 +130,14 @@ pub(crate) enum ProgramFile {
 /// is `vendor-viewer.desktop`, as GIO names it.
 fn desktop_id(path: &std::path::Path) -> Option<String> {
     let real_path = std::fs::canonicalize(path).ok();
-    let data_folders = std::iter::once(glib::user_data_dir()).chain(glib::system_data_dirs());
+    let host_data_folders = [
+        PathBuf::from("/run/host/usr/local/share"),
+        PathBuf::from("/run/host/usr/share"),
+        glib::home_dir().join(".local/share"),
+    ];
+    let data_folders = std::iter::once(glib::user_data_dir())
+        .chain(glib::system_data_dirs())
+        .chain(host_data_folders);
     data_folders
         .map(|folder| folder.join("applications"))
         .find_map(|folder| {
@@ -144,6 +155,30 @@ fn desktop_id(path: &std::path::Path) -> Option<String> {
         })
 }
 
+/// Whether `id` is an installed application launcher.
+fn is_installed_launcher(id: &str) -> bool {
+    if installed_application(id).is_some() {
+        return true;
+    }
+    if Sandbox::detect() == Sandbox::Flatpak {
+        return host_application_exists(id);
+    }
+    false
+}
+
+/// The visible name of `app_id`, falling back to `app_id` if unknown.
+pub(crate) fn application_display_name(app_id: &str) -> String {
+    if let Some(app) = installed_application(app_id) {
+        return app.display_name().to_string();
+    }
+    if Sandbox::detect() == Sandbox::Flatpak {
+        if let Some(name) = cached_application_name(app_id) {
+            return name;
+        }
+    }
+    app_id.to_owned()
+}
+
 /// What the program file at `path` is: an installed launcher (`.desktop`)
 /// or an executable file.
 ///
@@ -159,7 +194,7 @@ pub(crate) fn program_file(path: &std::path::Path) -> Result<ProgramFile, String
         let file_name = path.file_name().and_then(|name| name.to_str()).map(str::to_owned);
         return desktop_id(path)
             .or(file_name)
-            .filter(|id| installed_application(id).is_some())
+            .filter(|id| is_installed_launcher(id))
             .map(ProgramFile::Installed)
             .ok_or_else(|| ox_core::i18n::gettext("That app launcher is not installed."));
     }
@@ -228,24 +263,55 @@ pub(crate) fn list_applications(
         return Err(OpenWithError::Symlink);
     }
     let content_type = content_type_of(&entry);
-    let default_id: Option<String> = gio::AppInfo::default_for_type(&content_type, false)
-        .and_then(|app| app.id())
-        .map(Into::into);
+    let shows_everything = scope == ApplicationScope::AllInstalled || entry.is_dir;
+    let has_local_path = local_path(&entry.uri).is_some();
+
+    if Sandbox::detect() == Sandbox::Flatpak {
+        let host_scope = if shows_everything {
+            HostQueryScope::AllInstalled
+        } else {
+            HostQueryScope::Recommended
+        };
+        if let Some(host) = list_host_applications(&content_type, host_scope) {
+            let facts = ChoiceFacts {
+                default_id: host.default_id.as_deref(),
+                recommended_ids: &host.recommended_ids,
+                has_local_path,
+            };
+            return Ok(ApplicationList {
+                choices: facts.choices(host.apps),
+                content_type,
+                is_folder: entry.is_dir,
+            });
+        }
+    }
+
+    let default_app = gio::AppInfo::default_for_type(&content_type, false);
+    let default_id: Option<String> = default_app.as_ref().and_then(AppInfoExt::id).map(Into::into);
     let recommended = gio::AppInfo::all_for_type(&content_type);
     let recommended_ids: Vec<String> = recommended
         .iter()
         .filter_map(|app| app.id().map(Into::into))
         .collect();
-    let shows_everything = scope == ApplicationScope::AllInstalled || entry.is_dir;
-    let candidates = if shows_everything {
+    let mut candidates = if shows_everything {
         gio::AppInfo::all()
     } else {
         recommended
     };
+    if !shows_everything {
+        if let Some(default_app) = default_app {
+            let already_listed = default_id
+                .as_deref()
+                .is_some_and(|id| recommended_ids.iter().any(|rec| rec == id));
+            if !already_listed {
+                candidates.insert(0, default_app);
+            }
+        }
+    }
     let facts = ChoiceFacts {
         default_id: default_id.as_deref(),
         recommended_ids: &recommended_ids,
-        has_local_path: local_path(&entry.uri).is_some(),
+        has_local_path,
     };
     Ok(ApplicationList {
         choices: facts.choices(candidates),
@@ -269,6 +335,28 @@ pub(crate) fn menu_applications(
         (true, _) => FOLDER_CONTENT_TYPE,
         (false, known) => known.unwrap_or(UNKNOWN_CONTENT_TYPE),
     };
+    let has_local_path = local_path(uri).is_some();
+
+    let mut choices = if Sandbox::detect() == Sandbox::Flatpak {
+        if let Some(host) = list_host_applications(content_type, HostQueryScope::Menu) {
+            let facts = ChoiceFacts {
+                default_id: host.default_id.as_deref(),
+                recommended_ids: &host.recommended_ids,
+                has_local_path,
+            };
+            facts.choices(host.apps)
+        } else {
+            local_menu_choices(content_type, has_local_path)
+        }
+    } else {
+        local_menu_choices(content_type, has_local_path)
+    };
+    choices.retain(|choice| choice.is_available && (is_folder || !choice.is_default));
+    choices.truncate(limit);
+    choices
+}
+
+fn local_menu_choices(content_type: &str, has_local_path: bool) -> Vec<ApplicationChoice> {
     let default_id: Option<String> = gio::AppInfo::default_for_type(content_type, false)
         .and_then(|app| app.id())
         .map(Into::into);
@@ -280,12 +368,9 @@ pub(crate) fn menu_applications(
     let facts = ChoiceFacts {
         default_id: default_id.as_deref(),
         recommended_ids: &recommended_ids,
-        has_local_path: local_path(uri).is_some(),
+        has_local_path,
     };
-    let mut choices = facts.choices(recommended);
-    choices.retain(|choice| choice.is_available && (is_folder || !choice.is_default));
-    choices.truncate(limit);
-    choices
+    facts.choices(recommended)
 }
 
 /// The content type Open with lists applications for: `inode/directory`
@@ -308,7 +393,10 @@ struct ChoiceFacts<'a> {
 impl ChoiceFacts<'_> {
     /// The choices among `candidates`, one per visible name: the default
     /// first, then the recommended ones, then by name.
-    fn choices(&self, candidates: Vec<gio::AppInfo>) -> Vec<ApplicationChoice> {
+    fn choices<A: ox_core::integration::ApplicationInfo>(
+        &self,
+        candidates: Vec<A>,
+    ) -> Vec<ApplicationChoice> {
         let unique = unique_applications(candidates, self.default_id);
         let mut choices: Vec<ApplicationChoice> = unique.iter().filter_map(|app| self.choice(app)).collect();
         choices.sort_by_key(|choice| {
@@ -321,8 +409,8 @@ impl ChoiceFacts<'_> {
     /// The choice for `app`, or `None` for one Open with never offers:
     /// the app itself, a hidden launcher, or one that takes neither files
     /// nor URIs.
-    fn choice(&self, app: &gio::AppInfo) -> Option<ApplicationChoice> {
-        let id = app.id()?.to_string();
+    fn choice<A: ox_core::integration::ApplicationInfo>(&self, app: &A) -> Option<ApplicationChoice> {
+        let id = app.id()?;
         let offered = id != APP_ID && app.should_show() && (app.supports_files() || app.supports_uris());
         if !offered {
             return None;
@@ -331,8 +419,8 @@ impl ChoiceFacts<'_> {
             is_default: self.default_id == Some(id.as_str()),
             is_recommended: self.recommended_ids.contains(&id),
             is_available: self.has_local_path || app.supports_uris(),
-            name: app.display_name().to_string(),
-            icon: ox_core::integration::ApplicationInfo::icon(app),
+            name: app.display_name(),
+            icon: app.icon(),
             id,
         })
     }
@@ -444,6 +532,10 @@ pub(crate) fn launch(
     default: DefaultChoice,
     launch_context: &gio::AppLaunchContext,
 ) -> Result<&'static str, OpenWithError> {
+    if Sandbox::detect() == Sandbox::Flatpak {
+        launch_host_application(app_id, &prepared.target)?;
+        return Ok(default_after_host_launch(app_id, prepared, default));
+    }
     let app = installed_application(app_id).ok_or(OpenWithError::NotInstalled)?;
     app.launch(&[prepared.target.to_file()], Some(launch_context))
         .map_err(|_| OpenWithError::NotStarted)?;
@@ -456,6 +548,27 @@ fn default_after_launch(
     prepared: &PreparedLaunch,
     default: DefaultChoice,
 ) -> &'static str {
+    default_after_launch_with(prepared, default, || {
+        app.set_as_default_for_type(&prepared.content_type).is_ok()
+    })
+}
+
+/// Makes `app_id` the host's default when asked, and returns the toast.
+fn default_after_host_launch(
+    app_id: &str,
+    prepared: &PreparedLaunch,
+    default: DefaultChoice,
+) -> &'static str {
+    default_after_launch_with(prepared, default, || {
+        set_host_default_for_type(app_id, &prepared.content_type)
+    })
+}
+
+fn default_after_launch_with(
+    prepared: &PreparedLaunch,
+    default: DefaultChoice,
+    set_default: impl FnOnce() -> bool,
+) -> &'static str {
     const OPENED: &str = crate::i18n::message_id("Opened with the selected application.");
     if default == DefaultChoice::Keep {
         return ox_core::i18n::gettext_static(OPENED);
@@ -465,15 +578,86 @@ fn default_after_launch(
     if prepared.is_folder {
         return "Opened the folder. Its default file-manager association was not changed.";
     }
-    match app.set_as_default_for_type(&prepared.content_type) {
-        Ok(()) => ox_core::i18n::gettext_static(OPENED),
-        Err(_) => "Opened the file, but the default application could not be changed.",
+    if set_default() {
+        ox_core::i18n::gettext_static(OPENED)
+    } else {
+        "Opened the file, but the default application could not be changed."
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::integration::host_apps::HostApplication;
+
+    #[test]
+    fn host_applications_keep_default_and_related_order_and_filter_self() {
+        let recommended_ids = vec![
+            "wps-office-wps.desktop".to_owned(),
+            "org.gnome.Nautilus.desktop".to_owned(),
+        ];
+        let facts = ChoiceFacts {
+            default_id: Some("wps-office-prometheus.desktop"),
+            recommended_ids: &recommended_ids,
+            has_local_path: true,
+        };
+        let apps = vec![
+            HostApplication {
+                id: "wps-office-prometheus.desktop".to_owned(),
+                name: "WPS 2019".to_owned(),
+                should_show: true,
+                supports_files: true,
+                supports_uris: false,
+                icon: Some("wps-office2019-kprometheus".to_owned()),
+            },
+            HostApplication {
+                id: "wps-office-wps.desktop".to_owned(),
+                name: "WPS Writer".to_owned(),
+                should_show: true,
+                supports_files: true,
+                supports_uris: true,
+                icon: Some("wps-office2019-wpsmain".to_owned()),
+            },
+            HostApplication {
+                id: "org.gnome.Nautilus.desktop".to_owned(),
+                name: "Files".to_owned(),
+                should_show: true,
+                supports_files: true,
+                supports_uris: true,
+                icon: Some("org.gnome.Nautilus".to_owned()),
+            },
+            HostApplication {
+                id: APP_ID.to_owned(),
+                name: "OpenXplorer".to_owned(),
+                should_show: true,
+                supports_files: true,
+                supports_uris: true,
+                icon: None,
+            },
+            HostApplication {
+                id: "hidden.desktop".to_owned(),
+                name: "Hidden".to_owned(),
+                should_show: false,
+                supports_files: true,
+                supports_uris: true,
+                icon: None,
+            },
+        ];
+
+        let choices = facts.choices(apps);
+        let ids: Vec<&str> = choices.iter().map(|choice| choice.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [
+                "wps-office-prometheus.desktop",
+                "org.gnome.Nautilus.desktop",
+                "wps-office-wps.desktop",
+            ]
+        );
+        assert!(choices[0].is_default);
+        assert!(choices[1].is_recommended);
+        assert!(choices[2].is_recommended);
+    }
 
     fn choice(name: &str, is_default: bool, is_recommended: bool, is_available: bool) -> ApplicationChoice {
         ApplicationChoice {
