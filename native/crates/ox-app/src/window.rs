@@ -216,6 +216,7 @@ pub(crate) use closing::{QUIT_WHILE_WRITING, WAIT_FOR_FORMAT};
 pub(crate) use compact_density::DENSITY_CLASS as COMPACT_DENSITY_CLASS;
 pub(crate) use disk_tools::is_installed as is_disk_tool_installed;
 pub(crate) use folder_pane::FolderView;
+pub(crate) use integration_actions::work_in_windows;
 pub(crate) use menu_popover::OPENING_MOTION as MENU_OPENING_MOTION;
 pub(crate) use progress_window::ProgressWindow;
 pub(crate) use search_box::{show_bundled_clear_icon, show_bundled_magnifier};

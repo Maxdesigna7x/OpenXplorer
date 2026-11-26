@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "ox-app"
-version = "2.0.18"
+version = "2.0.19"
 dependencies = [
  "async-channel",
  "gdk4-wayland",
@@ -1438,7 +1438,7 @@ dependencies = [
 
 [[package]]
 name = "ox-core"
-version = "2.0.18"
+version = "2.0.19"
 dependencies = [
  "bzip2",
  "crc32fast",

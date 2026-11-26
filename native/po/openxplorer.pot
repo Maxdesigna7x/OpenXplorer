@@ -2805,11 +2805,23 @@ msgid "Help"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/about.rs
+msgid "Install updates automatically"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/about.rs
 msgid "Install updates without asking for a password"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/about.rs
 msgid "Install updates without asking for a password could not be changed."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/about.rs
+msgid "Installs updates in the background. Close and reopen OpenXplorer to use them."
+msgstr ""
+
+#: crates/ox-app/src/settings_page/about.rs
+msgid "Installs updates when file operations finish. Your system may ask for approval."
 msgstr ""
 
 #: crates/ox-app/src/settings_page/about.rs crates/ox-app/src/window/shortcuts_window.rs
@@ -2825,7 +2837,7 @@ msgid "Look for a newer OpenXplorer release."
 msgstr ""
 
 #: crates/ox-app/src/settings_page/about.rs
-msgid "Once a day, when OpenXplorer starts, ask GitHub whether a newer release exists. Nothing installs without you."
+msgid "Look for a newer release automatically when OpenXplorer starts."
 msgstr ""
 
 #: crates/ox-app/src/settings_page/about.rs
@@ -2886,6 +2898,10 @@ msgstr ""
 
 #: crates/ox-app/src/settings_page/about.rs
 msgid "update version release upgrade software updates install restart flatpak"
+msgstr ""
+
+#: crates/ox-app/src/settings_page/about.rs
+msgid "updates automatic install flatpak debian"
 msgstr ""
 
 #: crates/ox-app/src/settings_page/appearance.rs
@@ -4540,6 +4556,10 @@ msgstr ""
 msgid "Checking for updates…"
 msgstr ""
 
+#: crates/ox-app/src/update/state.rs
+msgid "Close and reopen OpenXplorer to use the update."
+msgstr ""
+
 #. Keep each {name} as it is: the app puts a value there.
 #: crates/ox-app/src/update/state.rs
 msgid "Could not check for updates. {reason}"
@@ -4552,6 +4572,14 @@ msgstr ""
 
 #: crates/ox-app/src/update/state.rs
 msgid "Details…"
+msgstr ""
+
+#: crates/ox-app/src/update/state.rs
+msgid "Flatpak could not install the update. Try again or update from your software manager."
+msgstr ""
+
+#: crates/ox-app/src/update/state.rs
+msgid "Flatpak is checking for updates in the background."
 msgstr ""
 
 #: crates/ox-app/resources/ui/update-dialog.ui crates/ox-app/src/update/state.rs
@@ -4576,6 +4604,10 @@ msgstr ""
 #. Keep each {name} as it is: the app puts a value there.
 #: crates/ox-app/src/update/state.rs
 msgid "Installed: {running}. Look for a newer OpenXplorer release."
+msgstr ""
+
+#: crates/ox-app/src/update/state.rs
+msgid "Installing the Flatpak update…"
 msgstr ""
 
 #: crates/ox-app/src/update/state.rs
@@ -4634,6 +4666,10 @@ msgstr ""
 #. Keep each {name} as it is: the app puts a value there.
 #: crates/ox-app/src/update/state.rs
 msgid "Update installation did not complete. {reason}{recovery}"
+msgstr ""
+
+#: crates/ox-app/src/update/state.rs
+msgid "Update installed"
 msgstr ""
 
 #: crates/ox-app/src/window/about.rs
@@ -10324,6 +10360,10 @@ msgstr ""
 
 #: packaging/data/io.winspace.Development.Native.metainfo.xml
 msgid "OpenXplorer Native Preview"
+msgstr ""
+
+#: packaging/data/io.winspace.Development.Native.metainfo.xml packaging/data/io.winspace.Development.metainfo.xml
+msgid "OpenXplorer RANDY checks for updates from its own Debian and Flatpak release channels."
 msgstr ""
 
 #: packaging/data/io.winspace.Development.Native.metainfo.xml packaging/data/io.winspace.Development.metainfo.xml

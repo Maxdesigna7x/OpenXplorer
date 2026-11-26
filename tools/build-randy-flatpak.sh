@@ -21,7 +21,7 @@ strip --strip-debug "$stage/build/files/bin/openxplorer-native"
 mapfile -t permissions < <(
     sed -n 's/^  - \(--.*\)$/\1/p' native/packaging/flatpak/io.winspace.Development.Native.yml
 )
-flatpak build-finish --command=openxplorer-native --env=OX_NO_UPDATE_CHECK=1 \
+flatpak build-finish --command=openxplorer-native \
     "${permissions[@]}" "$stage/build"
 
 # This repository is temporary and contains only this bundle.

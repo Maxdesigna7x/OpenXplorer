@@ -1,3 +1,11 @@
+# 2.0.19 — 2026-11-26
+
+OpenXplorer RANDY publica el instalador Debian y el Flatpak x86-64 desde la misma versión. El Flatpak recibe actualizaciones desde el canal firmado y muestra su estado en la barra de la aplicación. En **Configuración → Acerca de** puedes activar la instalación en segundo plano y aplicar el cambio al volver a abrir OpenXplorer.
+
+- **Flatpak:** instala `io.winspace.Development.Native.flatpak` o usa el [canal Flatpak](https://maxdesigna7x.github.io/OpenXplorer/OpenXplorer.flatpakref). Si tienes un paquete RANDY anterior, reinstala una vez desde el canal para conservar el mismo perfil y recibir futuras versiones.
+- **Debian:** instala `openxplorer_2.0.19_all.deb` en Zorin OS 18, Ubuntu 24.04 o Debian 13. A partir de esta versión, **Buscar actualizaciones** consulta las publicaciones de OpenXplorer RANDY. La instalación automática opcional espera a que terminen las operaciones de archivos.
+- La publicación incluye el código fuente correspondiente y `SHA256SUMS`.
+
 # 2.0.18 — 2026-11-16
 
 Pictures and PDFs in network folders show thumbnails by default, as in Windows. The command bar's menus switch with one click, the keyboard menu opens at the item the keyboard is on, No in the Rename question ends the rename, Duplicate tab puts the copy next to the original, and Ctrl+A while renaming selects just the name. Much of this release is the work of @addition-official.

@@ -21,7 +21,7 @@
 %global debug_package %{nil}
 
 Name:           %{package_name}
-Version:        2.0.18
+Version:        2.0.19
 Release:        1%{?dist}
 Summary:        %{summary_text}
 # The program is AGPL-3.0-only; the Rust crates compiled into it are MIT,
@@ -142,6 +142,9 @@ appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/%{app_id}.metain
 %endif
 
 %changelog
+* Thu Nov 26 2026 OpenXplorer contributors <openxplorer@users.noreply.github.com> - 2.0.19-1
+- Publish and check the OpenXplorer RANDY update channels.
+
 * Mon Nov 16 2026 OpenXplorer contributors <openxplorer@users.noreply.github.com> - 2.0.18-1
 - OpenXplorer 2.0.18: thumbnails in network folders by default, one-click
   switching between command bar menus, the keyboard menu at the focused

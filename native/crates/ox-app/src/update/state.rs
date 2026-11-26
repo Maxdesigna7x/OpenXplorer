@@ -94,6 +94,13 @@ pub(crate) enum UpdateState {
     },
     /// An earlier installation waits for a restart; GitHub was not asked.
     RestartPending,
+    /// Flatpak is monitoring the installed origin.
+    FlatpakWatching,
+    FlatpakAvailable,
+    FlatpakInstalling,
+    /// The running sandbox stays usable until the app is reopened.
+    FlatpakReady,
+    FlatpakFailed,
     /// Restart now failed.
     RestartFailed {
         /// Why, in the updater's words.
@@ -133,7 +140,10 @@ impl UpdateState {
     /// Whether a check or an installation runs, which disables Check
     /// again, Install update… and Restart now (`busy` in `updatesDialog`).
     pub(crate) fn is_busy(&self) -> bool {
-        matches!(self, Self::Checking | Self::Installing { .. })
+        matches!(
+            self,
+            Self::Checking | Self::Installing { .. } | Self::FlatpakInstalling
+        )
     }
 
     /// Whether an installation runs, which locks the application (UPD-005).
@@ -186,6 +196,15 @@ impl UpdateState {
             Self::NotChecked | Self::Checking => {
                 ox_core::i18n::gettext_static("Checking for updates…").to_owned()
             }
+            Self::FlatpakWatching => {
+                ox_core::i18n::gettext("Flatpak is checking for updates in the background.")
+            }
+            Self::FlatpakAvailable => ox_core::i18n::gettext("An update is available."),
+            Self::FlatpakInstalling => ox_core::i18n::gettext("Installing the Flatpak update…"),
+            Self::FlatpakReady => ox_core::i18n::gettext("Close and reopen OpenXplorer to use the update."),
+            Self::FlatpakFailed => ox_core::i18n::gettext(
+                "Flatpak could not install the update. Try again or update from your software manager.",
+            ),
             Self::UpToDate { .. } => ox_core::i18n::gettext_static("OpenXplorer is up to date.").to_owned(),
             Self::Available(update) if update.installation.can_install() => {
                 ox_core::i18n::gettext_static("An update is available.").to_owned()
@@ -247,6 +266,7 @@ impl UpdateState {
                 "OpenXplorer {latest} is available.",
                 &[("latest", &update.latest.to_string())],
             )),
+            Self::FlatpakAvailable | Self::FlatpakReady | Self::FlatpakFailed => Some(self.status_text()),
             _ if self.needs_restart() => {
                 Some(ox_core::i18n::gettext_static("Restart OpenXplorer to finish updating.").to_owned())
             }
@@ -258,7 +278,10 @@ impl UpdateState {
     /// is available, "Restart" while an installed one waits, else hidden.
     pub(crate) fn command_bar_label(&self) -> Option<&'static str> {
         match self {
-            Self::Available(_) => Some(ox_core::i18n::gettext_static("Update")),
+            Self::Available(_) | Self::FlatpakAvailable | Self::FlatpakFailed => {
+                Some(ox_core::i18n::gettext_static("Update"))
+            }
+            Self::FlatpakReady => Some(ox_core::i18n::gettext_static("Update installed")),
             _ if self.needs_restart() => Some(ox_core::i18n::gettext_static("Restart")),
             _ => None,
         }
@@ -268,7 +291,10 @@ impl UpdateState {
     /// ([`Self::status_bar_notice`]).
     pub(crate) fn status_bar_label(&self) -> Option<&'static str> {
         match self {
-            Self::Available(_) => Some(ox_core::i18n::gettext_static("Update available")),
+            Self::Available(_) | Self::FlatpakAvailable | Self::FlatpakFailed => {
+                Some(ox_core::i18n::gettext_static("Update available"))
+            }
+            Self::FlatpakReady => Some(ox_core::i18n::gettext_static("Update installed")),
             _ if self.needs_restart() => Some(ox_core::i18n::gettext_static("Restart to finish updating")),
             _ => None,
         }

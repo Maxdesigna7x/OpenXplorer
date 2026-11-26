@@ -228,7 +228,7 @@ impl UpdateDialog {
     /// the status while the update installs.
     fn install(&self) {
         let imp = self.imp();
-        if self.work() == Activity::Busy {
+        if !super::is_flatpak() && self.work() == Activity::Busy {
             imp.refusal
                 .replace(Some(ox_core::i18n::gettext_static(WORK_RUNNING)));
             self.show_state();
@@ -274,10 +274,13 @@ impl UpdateDialog {
         let needs_restart = state.needs_restart();
         let available = state.available();
         imp.close_button.set_sensitive(!state.is_installing());
+        imp.check_button
+            .set_visible(!super::is_flatpak() || matches!(state, UpdateState::CheckFailed { .. }));
         imp.check_button.set_sensitive(!busy && !needs_restart);
+        let flatpak = matches!(state, UpdateState::FlatpakAvailable | UpdateState::FlatpakFailed);
         imp.install_button
-            .set_visible(available.is_some() && !needs_restart);
-        let can_install = available.is_some_and(|update| update.installation.can_install());
+            .set_visible((flatpak || available.is_some()) && !needs_restart);
+        let can_install = flatpak || available.is_some_and(|update| update.installation.can_install());
         imp.install_button.set_sensitive(!busy && can_install);
         imp.restart_button.set_visible(needs_restart);
         imp.restart_button.set_sensitive(!busy);

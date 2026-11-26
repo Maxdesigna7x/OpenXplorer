@@ -244,17 +244,17 @@ class ReleasePackageTests(unittest.TestCase):
     VERSION = '2.0.0'
     STABLE_PACKAGES = [
         'openxplorer_2.0.0_all.deb',
-        'io.winspace.Development.flatpak',
+        'io.winspace.Development.Native.flatpak',
         'openxplorer-2.0.0-1-x86_64.pkg.tar.zst',
         'openxplorer-2.0.0-1.fc44.x86_64.rpm',
         'openxplorer-2.0.0-1.opensuse_tumbleweed.x86_64.rpm',
     ]
     OTHER_FILES = [
-        # The preview's packages and bundle.
+        # Preview packages and the upstream Flatpak.
         'openxplorer-native_2.0.0_amd64.deb',
         'openxplorer-native-2.0.0-1.fc44.x86_64.rpm',
         'openxplorer-native-2.0.0-1-x86_64.pkg.tar.zst',
-        'io.winspace.Development.Native.flatpak',
+        'io.winspace.Development.flatpak',
         # Packages of another version.
         'openxplorer-1.9.0-1.fc44.x86_64.rpm',
         'openxplorer-2.0.1-1-x86_64.pkg.tar.zst',

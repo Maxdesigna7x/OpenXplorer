@@ -310,6 +310,12 @@ impl AppContext {
         if !preferences.update_checks {
             return;
         }
+        if crate::update::is_flatpak() {
+            self.updates()
+                .set_automatic_flatpak(preferences.install_updates_automatically);
+            self.updates().check_automatically(None);
+            return;
+        }
         let checked_recently = preferences
             .update_checked_at
             .is_some_and(|last| last <= now && now - last < UPDATE_CHECK_INTERVAL);
@@ -435,9 +441,23 @@ impl AppContext {
         update: PreferencesUpdate,
         reply: impl FnOnce(Result<(), SettingsError>) + 'static,
     ) {
+        let automatic_flatpak = update
+            .install_updates_automatically
+            .filter(|_| crate::update::is_flatpak());
+        let context = self.downgrade();
         let change: Change =
             Box::new(move |settings: &mut Settings| settings.update_preferences(&update).map(|_| ()));
-        self.change_settings(change, reply);
+        self.change_settings(change, move |result| {
+            if let (true, Some(enabled), Some(context)) =
+                (result.is_ok(), automatic_flatpak, context.upgrade())
+            {
+                context.updates().set_automatic_flatpak(enabled);
+                if enabled {
+                    context.updates().check_automatically(None);
+                }
+            }
+            reply(result);
+        });
     }
 
     /// Saves every valid value of `update` off the main thread without

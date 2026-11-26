@@ -325,7 +325,7 @@ fn the_license_dialog_shows_the_copyright_the_source_and_the_agpl() {
         text.starts_with("Copyright (c) 2026 OpenXplorer contributors."),
         "{text}"
     );
-    assert!(text.contains("https://github.com/AKolenda/openxplorer, tag v"));
+    assert!(text.contains("https://github.com/Maxdesigna7x/OpenXplorer, tag v"));
     assert!(dialog
         .scrolled_text()
         .contains("GNU AFFERO GENERAL PUBLIC LICENSE"));
