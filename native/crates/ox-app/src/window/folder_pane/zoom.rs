@@ -57,6 +57,7 @@ struct VisibleCell {
 
 impl FolderPane {
     pub(in crate::window) fn capture_zoom(&self, duration_ms: u32) -> Option<Zoom> {
+        crate::folder_view::stop_active_video_preview();
         if self.page() != Some(PanePage::Listing)
             || !self.is_mapped()
             || !self.settings().is_gtk_enable_animations()

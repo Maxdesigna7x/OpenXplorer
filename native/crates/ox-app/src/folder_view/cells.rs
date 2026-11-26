@@ -19,6 +19,7 @@ mod item_check;
 mod marks;
 pub(crate) use item_check::own_clicks;
 mod row_tooltip;
+mod video_hover;
 
 use std::rc::Rc;
 
@@ -31,6 +32,7 @@ pub(crate) use custom_icon::{icon_texture, CUSTOM_ICON};
 pub(crate) use expander::connect_expanders;
 pub(crate) use folder_picture::{folder_picture_of, FolderPicture, FOLDER_PICTURE};
 pub(crate) use row_tooltip::{show_row_tooltip, CellTooltip, RowTooltip, TooltipCell};
+pub(crate) use video_hover::stop_active_video_preview;
 
 use crate::folder_view::grid::{GroupSlot, SlotKind};
 use crate::folder_view::item::FileItem;
@@ -244,6 +246,10 @@ mod imp {
         pub(super) is_details_row: Cell<bool>,
         /// The running lookup of the custom icon or preview.
         pub(super) picture_lookup: RefCell<Option<glib::JoinHandle<()>>>,
+        /// Local video path eligible for inline hover playback.
+        pub(super) hover_video: RefCell<Option<std::path::PathBuf>>,
+        /// Pending hover delay before starting inline video playback.
+        pub(super) hover_delay: RefCell<Option<glib::SourceId>>,
         /// Holds the icon, and on a tile spans it, with the check box in
         /// its top left corner.
         pub(super) icon_frame: gtk::Overlay,
@@ -310,6 +316,7 @@ mod imp {
             self.icon_frame.add_overlay(&self.folder_picture);
             cell.append(&self.icon_frame);
             cell.append(&self.label);
+            cell.install_video_hover();
         }
     }
 
