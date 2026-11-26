@@ -12,7 +12,7 @@ const PORTAL_PATH: &str = "/org/freedesktop/portal/Flatpak";
 const MONITOR: &str = "org.freedesktop.portal.Flatpak.UpdateMonitor";
 
 pub(crate) fn is_flatpak() -> bool {
-    std::path::Path::new("/.flatpak-info").is_file()
+    ox_core::integration::Sandbox::detect().is_flatpak()
 }
 
 pub(super) async fn monitor(updates: &Updates) -> Result<gio::DBusProxy, glib::Error> {

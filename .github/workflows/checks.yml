@@ -78,8 +78,26 @@ jobs:
         run: sh native/packaging/ci/prepare-container.sh "${{ matrix.family }}"
       - name: Install Rust 1.92.0 and stable with rustup
         run: runuser -u builder -- sh native/packaging/ci/install-rust.sh
-      - name: Run the native check driver
-        run: runuser -u builder -- sh native/packaging/ci/run-checks.sh
+      # The comprehensive workspace checks run in native-checks.yml.
+      - name: Test the Debian updater in an isolated session
+        if: matrix.format == 'deb'
+        run: |
+          runuser -u builder -- sh -s <<'SH'
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          export PYTHONPATH="$PWD/native/tools"
+          python3 - <<'PY'
+          from check import executables_in, run, run_isolated
+
+          build = run('cargo', 'test', '--locked', '-p', 'ox-core', '-p', 'ox-app',
+                      '--lib', '--no-run', '--message-format=json', capture_stdout=True)
+          binaries = sorted(executables_in(build.stdout))
+          if len(binaries) != 2:
+              raise RuntimeError('Expected the ox-core and ox-app test executables')
+          for binary in binaries:
+              run_isolated([str(binary), 'update::', '--test-threads=1'], 180)
+          PY
+          SH
       - name: Build and verify the stable ${{ matrix.format }} package
         run: >-
           runuser -u builder -- sh native/packaging/ci/build-package.sh

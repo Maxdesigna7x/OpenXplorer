@@ -51,7 +51,9 @@ in `native/packaging/data/`, `package.json`, `apps/web/package.json`,
 starts with the release's entry (the workflow publishes its first section as
 the release notes). On `main`, `checks.yml` builds the stable `.deb` (Ubuntu
 24.04), the RPMs (Fedora, openSUSE), the Arch package and the Flatpak bundle on
-hosted runners, and the release job verifies and publishes them.
+hosted runners, and the release job verifies and publishes them. The Debian
+release job runs the isolated updater tests. The native checks workflow also
+runs the full workspace checks.
 
 RANDY releases publish `openxplorer_<version>_all.deb`, the
 `io.winspace.Development.Native.flatpak` bundle and its signed Flatpak
