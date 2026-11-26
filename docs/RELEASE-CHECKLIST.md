@@ -56,7 +56,9 @@ hosted runners, and the release job verifies and publishes them.
 RANDY releases publish `openxplorer_<version>_all.deb`, the
 `io.winspace.Development.Native.flatpak` bundle and its signed Flatpak
 repository together. The Pages deployment serves the
-[Flatpak reference](https://maxdesigna7x.github.io/OpenXplorer/OpenXplorer.flatpakref).
+[Flatpak reference](https://maxdesigna7x.github.io/OpenXplorer/OpenXplorer.flatpakref)
+and the signed remote's
+[`.flatpakrepo` descriptor](https://maxdesigna7x.github.io/OpenXplorer/OpenXplorer.flatpakrepo).
 The main-only `flatpak-signing` environment provides the
 `FLATPAK_SIGNING_KEY` secret and the `FLATPAK_SIGNING_FINGERPRINT` variable.
 Use the same signing identity for subsequent releases so existing installs
