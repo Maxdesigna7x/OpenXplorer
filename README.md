@@ -4,13 +4,21 @@
 
 ## Instalar en Zorin OS
 
-Descarga el [Flatpak de OpenXplorer RANDY](https://github.com/Maxdesigna7x/OpenXplorer/releases/download/v2.0.18-randy.9/OpenXplorer-RANDY-2.0.18.flatpak) para Linux x86-64. Ábrelo en la tienda de software o ejecuta lo siguiente desde la carpeta de descarga.
+Las [publicaciones de OpenXplorer RANDY](https://github.com/Maxdesigna7x/OpenXplorer/releases/latest) incluyen el paquete `.deb` para Zorin OS 18, Ubuntu 24.04 y Debian 13, el Flatpak para Linux x86-64, el código fuente y `SHA256SUMS`.
+
+Para instalar el Flatpak con su canal firmado, usa el [archivo de instalación](https://maxdesigna7x.github.io/OpenXplorer/OpenXplorer.flatpakref) o ejecuta:
 
 ```sh
-flatpak install --user ./OpenXplorer-RANDY-2.0.18.flatpak
+flatpak install --user https://maxdesigna7x.github.io/OpenXplorer/OpenXplorer.flatpakref
 ```
 
-Abre **OpenXplorer RANDY** desde el menú de aplicaciones. El paquete usa el runtime GNOME 51 de Flathub. En la [publicación de GitHub](https://github.com/Maxdesigna7x/OpenXplorer/releases/tag/v2.0.18-randy.9) también están el código fuente correspondiente y la suma SHA-256.
+Si ya tienes un Flatpak RANDY instalado desde un archivo antiguo, cierra OpenXplorer y añade `--reinstall` al mismo comando. Conserva el ID y el perfil de usuario. Abre **Configuración → Acerca de** para buscar actualizaciones o activar su instalación automática. El Flatpak usa el runtime GNOME 51 de Flathub.
+
+Para instalar desde el paquete Debian descargado, ejecuta:
+
+```sh
+sudo apt install ./openxplorer_2.0.19_all.deb
+```
 
 Para generar el paquete desde el código, usa `tools/build-randy-flatpak.sh` en un entorno de compilación con Rust, las bibliotecas de [native](native/README.md) y el SDK GNOME 51.
 

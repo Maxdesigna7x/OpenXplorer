@@ -564,6 +564,9 @@ pub struct Preferences {
     /// On by default; stored only when off.
     #[serde(skip_serializing_if = "is_true")]
     pub update_checks: bool,
+    /// Ask the app to install updates automatically.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub install_updates_automatically: bool,
     /// Show the command bar's Update button while a release waits
     /// (UPD-001). On by default, as the owner chose; stored only when off.
     #[serde(skip_serializing_if = "is_true")]
@@ -688,6 +691,7 @@ impl Default for Preferences {
             folder_views: Vec::new(),
             downloads_group_by: None,
             update_checks: true,
+            install_updates_automatically: false,
             show_update_button: true,
             update_checked_at: None,
             update_notice_dismissed: None,
@@ -807,6 +811,10 @@ impl Preferences {
     /// release whose notice was dismissed (UPD-001).
     fn apply_update_checks(&mut self, update: &PreferencesUpdate) {
         replace_if_some(&mut self.update_checks, update.update_checks);
+        replace_if_some(
+            &mut self.install_updates_automatically,
+            update.install_updates_automatically,
+        );
         replace_if_some(&mut self.show_update_button, update.show_update_button);
         if let Some(checked_at) = update.update_checked_at {
             self.update_checked_at = Some(checked_at);
@@ -1159,6 +1167,8 @@ pub struct PreferencesUpdate {
     pub downloads_group_by: Option<GroupBy>,
     /// Look for a newer release once a day when the app starts.
     pub update_checks: Option<bool>,
+    /// Install updates automatically.
+    pub install_updates_automatically: Option<bool>,
     /// Show the command bar's Update button while a release waits.
     pub show_update_button: Option<bool>,
     /// When the app last looked for a release by itself.
@@ -1283,6 +1293,7 @@ impl PreferencesUpdate {
                 .and_then(Value::as_str)
                 .and_then(GroupBy::from_key),
             update_checks: flag("updateChecks"),
+            install_updates_automatically: flag("installUpdatesAutomatically"),
             show_update_button: flag("showUpdateButton"),
             update_checked_at: values.get("updateCheckedAt").and_then(Value::as_u64),
             update_notice_dismissed: text("updateNoticeDismissed").map(str::to_owned),

@@ -64,4 +64,4 @@ A signed repository with a pre-indexed AppStream catalog can supply that informa
 
 ---
 
-OpenXplorer 2.0.18. Project-authored documentation: AGPL-3.0-only.
+OpenXplorer 2.0.19. Project-authored documentation: AGPL-3.0-only.

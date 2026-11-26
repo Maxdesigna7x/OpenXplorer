@@ -40,4 +40,4 @@ Read Installation, open your home directory, and test a network share. Enable in
 
 ---
 
-OpenXplorer 2.0.18. Project-authored documentation: AGPL-3.0-only.
+OpenXplorer 2.0.19. Project-authored documentation: AGPL-3.0-only.

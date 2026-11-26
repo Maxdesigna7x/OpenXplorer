@@ -72,9 +72,12 @@ const NO_UPDATE_CHECK: &str = "OX_NO_UPDATE_CHECK";
 impl AppState {
     /// Looks for a newer release shortly after startup, at most once a
     /// day ([`AppContext::check_for_updates_if_due`]).
-    pub(super) fn check_for_updates_soon(&self) {
+    pub(super) fn check_for_updates_soon(&self, app: &gtk::Application) {
         if std::env::var(NO_UPDATE_CHECK).is_ok_and(|value| value == "1") {
             return;
+        }
+        if self.context.passwordless_updates().is_some() {
+            self.install_debian_updates_when_idle(app);
         }
         let context = self.context.downgrade();
         glib::timeout_add_seconds_local_once(UPDATE_CHECK_DELAY, move || {
@@ -85,6 +88,31 @@ impl AppState {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |since| since.as_secs());
             context.check_for_updates_if_due(now);
+        });
+    }
+
+    /// The Debian package manager replaces installed files. Use the same
+    /// idle check and restart gate as the dialog before starting it.
+    fn install_debian_updates_when_idle(&self, app: &gtk::Application) {
+        use ox_core::update::Activity;
+
+        let app = app.downgrade();
+        let context = self.context.downgrade();
+        glib::timeout_add_seconds_local(UPDATE_CHECK_DELAY, move || {
+            let (Some(app), Some(context)) = (app.upgrade(), context.upgrade()) else {
+                return glib::ControlFlow::Break;
+            };
+            let updates = context.updates();
+            if updates
+                .state()
+                .available()
+                .is_some_and(|update| update.installation.can_install())
+                && context.settings_data().preferences.install_updates_automatically
+                && crate::window::work_in_windows(Some(&app)) == Activity::Idle
+            {
+                updates.install(Activity::Idle);
+            }
+            glib::ControlFlow::Continue
         });
     }
 

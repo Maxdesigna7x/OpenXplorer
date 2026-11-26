@@ -71,8 +71,7 @@ const UPDATES: ActionGroup = ActionGroup {
 
 const AUTOMATIC_CHECKS: RowText = RowText {
     title: "Check for updates automatically",
-    description: "Once a day, when OpenXplorer starts, ask GitHub whether a newer release exists. Nothing \
-                  installs without you.",
+    description: "Look for a newer release automatically when OpenXplorer starts.",
     keywords: "automatic update check daily launch startup notify notification network github privacy",
 };
 
@@ -141,7 +140,11 @@ pub(super) fn build(page: &SettingsPage) -> SettingsSection {
     about.append_card(&build_card());
     let (updates, updates_row) = action_group(&UPDATES);
     updates.add_row(&automatic_checks_row(page));
-    if let Some(setting) = page.context().passwordless_updates() {
+    let passwordless = page.context().passwordless_updates();
+    if crate::update::is_flatpak() || passwordless.is_some() {
+        updates.add_row(&automatic_install_row(page));
+    }
+    if let Some(setting) = passwordless {
         updates.add_row(&passwordless_row(page, setting.clone()));
     }
     updates.add_row(&update_button_row(page));
@@ -184,6 +187,33 @@ fn automatic_checks_row(page: &SettingsPage) -> SettingRow {
         read: |preferences| preferences.update_checks,
         write: |on| PreferencesUpdate {
             update_checks: Some(on),
+            ..PreferencesUpdate::default()
+        },
+    };
+    row.add_control(&page.preference_switch(binding), ControlName::RowTitle);
+    row
+}
+
+fn automatic_install_row(page: &SettingsPage) -> SettingRow {
+    let description = if crate::update::is_flatpak() {
+        crate::i18n::message_id(
+            "Installs updates in the background. Close and reopen OpenXplorer to use them.",
+        )
+    } else {
+        crate::i18n::message_id(
+            "Installs updates when file operations finish. Your system may ask for approval.",
+        )
+    };
+    let row = SettingRow::new(RowText {
+        title: "Install updates automatically",
+        description,
+        keywords: "updates automatic install flatpak debian",
+    });
+    let binding = PreferenceBinding {
+        read: |preferences| preferences.install_updates_automatically,
+        write: |enabled| PreferencesUpdate {
+            install_updates_automatically: Some(enabled),
+            update_checks: enabled.then_some(true),
             ..PreferencesUpdate::default()
         },
     };

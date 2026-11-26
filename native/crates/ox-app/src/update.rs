@@ -29,6 +29,7 @@
 //! | `report` | `--check` and `--diagnose` |
 
 mod dialog;
+mod flatpak;
 mod launch_guard;
 mod passwordless;
 mod report;
@@ -49,6 +50,7 @@ use ox_core::update::{
 };
 
 pub(crate) use dialog::UpdateDialog;
+pub(crate) use flatpak::is_flatpak;
 pub(crate) use launch_guard::{LaunchCheck, RuntimeInfo, LAUNCHER_OPTIONS};
 pub(crate) use passwordless::{change_passwordless, passwordless_for_this_build, PasswordlessChange};
 pub(crate) use state::{AvailableUpdate, UpdateState};
@@ -62,9 +64,9 @@ mod imp {
     use std::rc::Rc;
     use std::sync::OnceLock;
 
-    use gtk::glib;
     use gtk::glib::subclass::Signal;
     use gtk::subclass::prelude::*;
+    use gtk::{gio, glib};
     use ox_core::update::UpdateService;
 
     use super::{UpdateState, STATE_CHANGED};
@@ -85,6 +87,8 @@ mod imp {
         /// The release whose notice was dismissed, as the settings keep
         /// it; its notice does not pop up.
         pub(super) dismissed: RefCell<Option<String>>,
+        pub(super) flatpak_monitor: OnceCell<gio::DBusProxy>,
+        pub(super) automatic_flatpak: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -215,8 +219,71 @@ impl Updates {
         }
     }
 
-    /// Asks GitHub, whoever started the check.
+    fn start_flatpak_monitor(&self) {
+        if self.imp().flatpak_monitor.get().is_some() {
+            if self.state() == UpdateState::FlatpakFailed {
+                self.set_state(UpdateState::FlatpakAvailable);
+            }
+            return;
+        }
+        self.set_state(UpdateState::Checking);
+        glib::spawn_future_local(glib::clone!(
+            #[strong(rename_to = updates)]
+            self,
+            async move {
+                match flatpak::monitor(&updates).await {
+                    Ok(monitor) => {
+                        let _ = updates.imp().flatpak_monitor.set(monitor);
+                        if updates.state() == UpdateState::Checking {
+                            updates.set_state(UpdateState::FlatpakWatching);
+                        }
+                        updates.maybe_install_flatpak();
+                    }
+                    Err(error) => updates.set_state(UpdateState::CheckFailed {
+                        reason: error.to_string(),
+                    }),
+                }
+            }
+        ));
+    }
+
+    pub(crate) fn set_automatic_flatpak(&self, enabled: bool) {
+        let changed = self.imp().automatic_flatpak.replace(enabled) != enabled;
+        if changed && enabled {
+            self.maybe_install_flatpak();
+        }
+    }
+
+    fn maybe_install_flatpak(&self) {
+        if self.imp().automatic_flatpak.get() && self.state() == UpdateState::FlatpakAvailable {
+            self.install_flatpak();
+        }
+    }
+
+    fn install_flatpak(&self) {
+        let Some(monitor) = self.imp().flatpak_monitor.get().cloned() else {
+            return;
+        };
+        self.set_state(UpdateState::FlatpakInstalling);
+        glib::spawn_future_local(glib::clone!(
+            #[strong(rename_to = updates)]
+            self,
+            async move {
+                if flatpak::install(&monitor).await.is_err()
+                    && updates.state() == UpdateState::FlatpakInstalling
+                {
+                    updates.set_state(UpdateState::FlatpakFailed);
+                }
+            }
+        ));
+    }
+
+    /// Checks through the package's own update channel.
     fn start_check(&self) {
+        if is_flatpak() {
+            self.start_flatpak_monitor();
+            return;
+        }
         self.set_state(UpdateState::Checking);
         glib::spawn_future_local(glib::clone!(
             #[strong(rename_to = updates)]
@@ -233,6 +300,13 @@ impl Updates {
     /// confirmed with "Install update…". `activity` says whether any
     /// window has work running, which refuses the installation (UPD-005).
     pub(crate) fn install(&self, activity: Activity) {
+        if matches!(
+            self.state(),
+            UpdateState::FlatpakAvailable | UpdateState::FlatpakFailed
+        ) {
+            self.install_flatpak();
+            return;
+        }
         let Some(update) = self.state().available() else {
             return;
         };

@@ -123,14 +123,15 @@ jobs:
       - name: Build the stable Flatpak bundle offline
         uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
         with:
-          manifest-path: native/packaging/flatpak/io.winspace.Development.yml
-          bundle: io.winspace.Development.flatpak
+          manifest-path: native/packaging/flatpak/io.winspace.Development.Native.yml
+          bundle: io.winspace.Development.Native.flatpak
+          branch: stable
           upload-artifact: false
           cache-key: flatpak-builder-release-${{ hashFiles('native/Cargo.lock') }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-flatpak
-          path: io.winspace.Development.flatpak
+          path: io.winspace.Development.Native.flatpak
           if-no-files-found: error
           # Only the release job of this run downloads it; a failed release can
           # be re-run.
@@ -141,7 +142,7 @@ jobs:
     # is not due) never leaves the site behind. Its download button opens
     # GitHub's latest release, so it needs no release to exist first. Only
     # main deploys.
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.CLOUDFLARE_ACCOUNT_ID != ''
     runs-on: ubuntu-24.04
     # The Cloudflare token is a secret of this environment, which only main
     # may use, so a workflow pushed on another branch cannot read it.
@@ -204,6 +205,9 @@ jobs:
     # Only main publishes.
     if: github.ref == 'refs/heads/main'
     needs: [native-package, native-flatpak]
+    environment: flatpak-signing
+    outputs:
+      publish_flatpak: ${{ steps.version.outputs.publish_flatpak }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -215,6 +219,19 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+      - name: Check whether this version is already published
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p 'require("./package.json").version')"
+          if git ls-remote --exit-code origin "refs/tags/$tag"; then
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
+            exit 0
+          else
+            test "$?" = 2
+          fi
+          echo 'publish_flatpak=true' >> "$GITHUB_OUTPUT"
       - name: Install the package validators
         # verify_layout.py runs desktop-file-validate and appstreamcli on the
         # staged Debian package; dpkg-deb is already on the image. It also
@@ -222,7 +239,7 @@ jobs:
         # links libsoup-3.0, so the runner needs that library too.
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends desktop-file-utils appstream libsoup-3.0-0
+          sudo apt-get install -y --no-install-recommends desktop-file-utils appstream libsoup-3.0-0 flatpak ostree
       - name: Verify release source and public-data policies
         run: |
           /usr/bin/python3 -m unittest discover -s tests -p 'test_release_source.py'
@@ -234,6 +251,19 @@ jobs:
           pattern: release-*
           path: ${{ runner.temp }}/packages
           merge-multiple: true
+      - name: Sign the Flatpak bundle and prepare its update channel
+        if: steps.version.outputs.publish_flatpak == 'true'
+        env:
+          SIGNING_KEY: ${{ secrets.FLATPAK_SIGNING_KEY }}
+          SIGNING_FINGERPRINT: ${{ vars.FLATPAK_SIGNING_FINGERPRINT }}
+        run: |
+          export GNUPGHOME=$(mktemp -d)
+          trap 'gpgconf --kill all; rm -rf "$GNUPGHOME"' EXIT
+          printf '%s' "$SIGNING_KEY" | gpg --batch --import
+          unset SIGNING_KEY
+          sh native/packaging/ci/flatpak-release.sh \
+            "$RUNNER_TEMP/packages/io.winspace.Development.Native.flatpak" \
+            "$RUNNER_TEMP/flatpak-pages" "$SIGNING_FINGERPRINT"
       - name: Stage the verified native packages and corresponding source
         run: /usr/bin/python3 tools/release.py --packages "$RUNNER_TEMP/packages"
       - name: Point out optional packages missing from the release
@@ -249,6 +279,12 @@ jobs:
           check "Arch package" '\.pkg\.tar\.zst$'
       - name: Audit complete release
         run: /usr/bin/python3 tools/audit-public-data.py
+      - name: Upload the signed Flatpak channel
+        if: steps.version.outputs.publish_flatpak == 'true'
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: ${{ runner.temp }}/flatpak-pages
+          retention-days: 3
       - name: Publish a new desktop version
         env:
           GH_TOKEN: ${{ github.token }}
@@ -271,11 +307,44 @@ jobs:
             # archive), then SHA256SUMS itself. The 1.1.x updater looks only
             # for openxplorer_<version>_all.deb.
             test -s "dist/openxplorer_${version}_all.deb"
+            test -s dist/io.winspace.Development.Native.flatpak
             mapfile -t assets < <(awk '{ print "dist/" $2 }' dist/SHA256SUMS)
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "OpenXplorer $version" --notes-file "$RUNNER_TEMP/release-notes.md" \
+              --latest --title "OpenXplorer $version" --notes-file "$RUNNER_TEMP/release-notes.md" \
               "${assets[@]}" dist/SHA256SUMS
           fi
+
+  flatpak-channel:
+    name: Deploy signed Flatpak update channel
+    needs: [release]
+    if: needs.release.outputs.publish_flatpak == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check that this release is still current
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p 'require("./package.json").version')"
+          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          if [ "$latest" = "$tag" ]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy the Flatpak repository
+        id: deploy
+        if: steps.current.outputs.deploy == 'true'
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
 
   # Keeps only the newest release packages. After this run publishes, deletes
   # the release packages of every successful run older than the newest one,
@@ -287,7 +356,7 @@ jobs:
   prune-artifacts:
     if: github.ref == 'refs/heads/main'
     name: Delete earlier release packages
-    needs: [release]
+    needs: [release, flatpak-channel]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

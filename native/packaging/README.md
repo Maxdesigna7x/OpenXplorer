@@ -353,10 +353,10 @@ Build, install and run it for the current user only (no administrator rights):
 ```sh
 flatpak install --user flathub org.flatpak.Builder org.gnome.Sdk//51 \
     org.freedesktop.Sdk.Extension.rust-stable//26.08
-flatpak run org.flatpak.Builder --user --force-clean --repo=repo build \
+flatpak run org.flatpak.Builder --user --force-clean --repo=repo --default-branch=stable build \
     native/packaging/flatpak/io.winspace.Development.Native.yml
 flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
-    repo io.winspace.Development.Native.flatpak io.winspace.Development.Native
+    repo io.winspace.Development.Native.flatpak io.winspace.Development.Native stable
 flatpak install --user io.winspace.Development.Native.flatpak
 flatpak run io.winspace.Development.Native
 ```
@@ -376,7 +376,7 @@ flatpak run io.winspace.Development.Native
 | `--own-name=org.freedesktop.FileManager1` | "Show in folder" (opt-in): after the user turns it on in Settings, the running app answers browsers' and other apps' requests to show a downloaded file in its folder. Flatpak only permits owning the name; the app claims it only while the integration is on. |
 | `--talk-name=org.freedesktop.Flatpak` | `flatpak-spawn --host`: Open in Terminal starts the host's terminal, and making OpenXplorer the default file manager (opt-in) runs the host's `xdg-mime`. |
 | `--system-talk-name=org.freedesktop.UDisks2` | Format… on a removable drive: the app's Format dialog asks the host's UDisks to unmount, format and mount the drive again. UDisks checks with polkit, which may ask for the user's password. |
-| `--share=network` | "Check for updates" asks GitHub whether a newer release exists. SMB and phone traffic goes through GVfs on the host. |
+| `--share=network` | Lets OpenXplorer use network resources from the sandbox. SMB and phone traffic goes through GVfs on the host. |
 
 The desktop portals, which every Flatpak may use, cover opening files with other
 applications, moving files to the Trash, notifications and the desktop's dark
@@ -403,8 +403,10 @@ style, so none of them needs a permission. A test
   runs. Nothing starts the app on demand when a request arrives
   (`crates/ox-core/src/integration/reveal.rs`,
   `crates/ox-core/src/integration/background_portal.rs`).
-- Updates come from Flatpak (GNOME Software or `flatpak update`); the app
-  never installs one itself.
+- Flatpak monitors the app's configured remote through its update portal.
+  Settings › About can request installation and opt into background installation.
+  The new deployment is used on the next launch. A release with additional
+  sandbox permissions requires the system software manager or `flatpak update`.
 - "Apps' Open and Save dialogs" is unavailable: choosing a portal backend
   means writing the host's portal configuration and installing a host
   `.portal` file, which a sandbox cannot do.
@@ -503,10 +505,8 @@ Only the owner can:
   unmount the drive, make the new file system and mount it again, as GNOME
   Disks does; UDisks checks every request with polkit, which may ask for the
   user's password.
-- `--share=network`: "Check for updates" reads GitHub's public release list to
-  say whether a newer version exists; Flatpak installs it. SMB and phones
-  go through the host's GVfs, not this permission. If Flathub asks to drop
-  it, the Flatpak build must hide the update check first.
+- `--share=network`: network resources in the sandbox. GVfs mounts and
+  Flatpak update checks use host services.
 
 ## RPM
 

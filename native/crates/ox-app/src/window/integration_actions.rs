@@ -608,7 +608,7 @@ impl BrowserWindow {
 /// Whether any window of `app` has work an update must not interrupt:
 /// folder listings, file writes and a drive being formatted (UPD-007,
 /// OPS-024, DEV-012).
-pub(in crate::window) fn work_in_windows(app: Option<&gtk::Application>) -> Activity {
+pub(crate) fn work_in_windows(app: Option<&gtk::Application>) -> Activity {
     let windows = app.map(GtkApplicationExt::windows).unwrap_or_default();
     let busy = windows
         .into_iter()

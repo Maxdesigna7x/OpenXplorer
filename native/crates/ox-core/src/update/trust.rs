@@ -8,17 +8,13 @@ use std::fmt;
 use super::UpdateError;
 
 /// The repository that publishes the app's releases.
-pub const REPOSITORY: &str = "https://github.com/AKolenda/openxplorer";
+pub const REPOSITORY: &str = "https://github.com/Maxdesigna7x/OpenXplorer";
 
-/// The repositories whose release installers are accepted: the original
-/// one and its new home in the openxplorer organisation. GitHub redirects
-/// the old API endpoint after the move, but the release assets then carry
-/// the new owner.
-pub const RELEASE_REPOSITORIES: [&str; 2] = [REPOSITORY, "https://github.com/openxplorer/openxplorer"];
+/// The repository whose release installers are accepted.
+pub const RELEASE_REPOSITORIES: [&str; 1] = [REPOSITORY];
 
-/// GitHub's "latest release" API endpoint: the only address an update
-/// check asks.
-pub const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/AKolenda/openxplorer/releases/latest";
+/// GitHub's latest release API endpoint for OpenXplorer RANDY.
+pub const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/Maxdesigna7x/OpenXplorer/releases/latest";
 
 /// The hosts the updater may contact, including GitHub's download hosts
 /// that release assets redirect to.

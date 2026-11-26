@@ -76,8 +76,9 @@ GENERATED_SOURCE_PATHS = frozenset({
 # The application ID of the released app: the Python app's, which the native
 # app takes over (native/packaging/README.md).
 STABLE_APP_ID = 'io.winspace.Development'
-FLATPAK_MANIFEST = NATIVE / 'packaging/flatpak' / f'{STABLE_APP_ID}.yml'
-FLATPAK_BUNDLE = f'{STABLE_APP_ID}.flatpak'
+FLATPAK_APP_ID = 'io.winspace.Development.Native'
+FLATPAK_MANIFEST = NATIVE / 'packaging/flatpak' / f'{FLATPAK_APP_ID}.yml'
+FLATPAK_BUNDLE = f'{FLATPAK_APP_ID}.flatpak'
 FLATPAK_REMOTE = 'https://dl.flathub.org/repo/flathub.flatpakrepo'
 # flatpak-builder's build folder and cache. It must lie outside the repository,
 # so neither the source archive nor the public-data audit reads it, and outside
@@ -88,8 +89,7 @@ FLATPAK_WORK = Path(os.environ.get('XDG_CACHE_HOME') or Path.home() / '.cache') 
 # RPM spec, the PKGBUILD and the Flatpak manifest name them for the version
 # in {version}: the Fedora and openSUSE RPMs, which differ in their
 # distribution tag (.fc44, .opensuse_tumbleweed), the Arch package and the
-# Flatpak bundle. The preview's names (openxplorer-native...,
-# ...Development.Native.flatpak) and packages of another version never match.
+# RANDY Flatpak bundle. Debian preview packages and packages of other versions are excluded.
 EXTRA_PACKAGE_PATTERNS = ('openxplorer-{version}-*.rpm', 'openxplorer-{version}-*.pkg.tar.zst',
                           FLATPAK_BUNDLE)
 # Suffixes of the artifacts an earlier build left in dist/.
@@ -283,10 +283,11 @@ def build_flatpak_bundle(work: Path) -> Path:
     # hard-linked files; the org.flatpak.Builder Flatpak cannot mount it.
     subprocess.run([*flatpak_builder(), '--user', '--force-clean', '--disable-rofiles-fuse',
                     f'--state-dir={work / "state"}', f'--repo={repository}',
+                    "--default-branch=stable",
                     str(work / 'build'), str(FLATPAK_MANIFEST)], check=True)
     bundle = DIST / FLATPAK_BUNDLE
     subprocess.run(['flatpak', 'build-bundle', f'--runtime-repo={FLATPAK_REMOTE}',
-                    str(repository), str(bundle), STABLE_APP_ID], check=True)
+                    str(repository), str(bundle), FLATPAK_APP_ID, "stable"], check=True)
     return bundle
 
 

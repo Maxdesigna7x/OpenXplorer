@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(fetched.result, Ok(BODY));
         let expected = [
             SentRequest {
-                address: "https://api.github.com/repos/AKolenda/openxplorer/releases/latest".to_owned(),
+                address: "https://api.github.com/repos/Maxdesigna7x/OpenXplorer/releases/latest".to_owned(),
                 media_type: MediaType::GitHubJson,
             },
             SentRequest {
