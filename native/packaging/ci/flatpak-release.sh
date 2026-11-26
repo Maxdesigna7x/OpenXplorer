@@ -25,6 +25,15 @@ flatpak build-bundle --repo-url="$url" --runtime-repo="$runtime" --gpg-keys="$wo
     "$repo" "$work/$app_id.flatpak" "$app_id" stable
 mv "$work/$app_id.flatpak" "$bundle"
 
+key=$(base64 -w0 "$work/key.gpg")
+cat > "$site/OpenXplorer.flatpakrepo" <<REPO
+[Flatpak Repo]
+Title=OpenXplorer RANDY
+Url=$url
+DefaultBranch=stable
+GPGKey=$key
+REPO
+
 cat > "$site/OpenXplorer.flatpakref" <<REF
 [Flatpak Ref]
 Title=OpenXplorer RANDY
@@ -34,5 +43,5 @@ Url=$url
 SuggestRemoteName=openxplorer-randy
 IsRuntime=false
 RuntimeRepo=$runtime
-GPGKey=$(base64 -w0 "$work/key.gpg")
+GPGKey=$key
 REF

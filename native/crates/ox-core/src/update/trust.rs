@@ -13,7 +13,7 @@ pub const REPOSITORY: &str = "https://github.com/Maxdesigna7x/OpenXplorer";
 /// The repository whose release installers are accepted.
 pub const RELEASE_REPOSITORIES: [&str; 1] = [REPOSITORY];
 
-/// GitHub's latest release API endpoint for OpenXplorer RANDY.
+/// GitHub's latest release API endpoint for `OpenXplorer` RANDY.
 pub const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/Maxdesigna7x/OpenXplorer/releases/latest";
 
 /// The hosts the updater may contact, including GitHub's download hosts

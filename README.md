@@ -12,7 +12,14 @@ Para instalar el Flatpak con su canal firmado, usa el [archivo de instalación](
 flatpak install --user https://maxdesigna7x.github.io/OpenXplorer/OpenXplorer.flatpakref
 ```
 
-Si ya tienes un Flatpak RANDY instalado desde un archivo antiguo, cierra OpenXplorer y añade `--reinstall` al mismo comando. Conserva el ID y el perfil de usuario. Abre **Configuración → Acerca de** para buscar actualizaciones o activar su instalación automática. El Flatpak usa el runtime GNOME 51 de Flathub.
+Si ya tienes un Flatpak RANDY instalado desde un archivo antiguo, cierra OpenXplorer y migra al canal firmado con estos comandos. Se conserva el ID y el perfil de usuario.
+
+```sh
+flatpak remote-add --user --if-not-exists openxplorer-randy https://maxdesigna7x.github.io/OpenXplorer/OpenXplorer.flatpakrepo
+flatpak install --user --reinstall openxplorer-randy io.winspace.Development.Native//stable
+```
+
+Abre **Configuración → Acerca de** para consultar el estado de las actualizaciones o activar su instalación automática. El Flatpak usa el runtime GNOME 51 de Flathub.
 
 Para instalar desde el paquete Debian descargado, ejecuta:
 
